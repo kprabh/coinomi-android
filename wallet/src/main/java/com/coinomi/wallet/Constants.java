@@ -47,6 +47,8 @@ import com.coinomi.core.coins.VertcoinMain;
 import com.coinomi.core.coins.VpncoinMain;
 import com.coinomi.core.coins.RichcoinMain;
 import com.coinomi.core.coins.IxcoinMain;
+import com.coinomi.core.coins.VoxelsMain;
+import com.coinomi.core.coins.SilkcoinMain;
 import com.coinomi.core.network.CoinAddress;
 import com.coinomi.stratumj.ServerAddress;
 import com.google.common.collect.ImmutableList;
@@ -215,6 +217,11 @@ public class Constants {
                                                     new ServerAddress("richx-cce-2.coinomi.net", 5046)),
             new CoinAddress(IxcoinMain.get(),       new ServerAddress("ixc-cce-1.coinomi.net", 5047),
                                                     new ServerAddress("ixc-cce-2.coinomi.net", 5047))
+            new CoinAddress(VoxelsMain.get(),       new ServerAddress("voxels-1.crypto-expert.com", 5048),
+                                                    new ServerAddress("voxels-2.crypto-expert.com", 5048))
+            new CoinAddress(SilkcoinMain.get(),     new ServerAddress("silkcoin-1.crypto-expert.com", 5049),
+                                                    new ServerAddress("silkcoin-2.crypto-expert.com", 5049))
+
     );
 
     public static final HashMap<CoinType, Integer> COINS_ICONS;
@@ -264,6 +271,8 @@ public class Constants {
         COINS_ICONS.put(CoinID.CLUBCOIN_MAIN.getCoinType(), R.drawable.clubcoin);
         COINS_ICONS.put(CoinID.RICHCOIN_MAIN.getCoinType(), R.drawable.richcoin);
         COINS_ICONS.put(CoinID.IXCOIN_MAIN.getCoinType(), R.drawable.ixcoin);
+	COINS_ICONS.put(CoinID.VOXELS_MAIN.getCoinType(), R.drawable.voxels);
+	COINS_ICONS.put(CoinID.SILKCOIN_MAIN.getCoinType(), R.drawable.silkcoin);
 
         COINS_BLOCK_EXPLORERS = new HashMap<CoinType, String>();
         COINS_BLOCK_EXPLORERS.put(CoinID.BITCOIN_MAIN.getCoinType(), "https://blockchain.info/tx/%s");
@@ -358,6 +367,8 @@ public class Constants {
             VpncoinMain.get(),
             BitcoinTest.get(),
             LitecoinTest.get(),
-            DogecoinTest.get()
+            DogecoinTest.get(),
+	    VoxelsMain.get(),
+	    SilkcoinMain.get(),
     );
 }
