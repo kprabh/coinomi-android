@@ -26,6 +26,7 @@ import android.database.MatrixCursor;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.net.Uri.Builder;
 import android.preference.PreferenceManager;
 import android.provider.BaseColumns;
 
@@ -36,9 +37,8 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.util.ExchangeRateBase;
 import com.coinomi.wallet.util.NetworkUtils;
 import com.google.common.collect.ImmutableMap;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -51,7 +51,12 @@ import java.net.URL;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.TreeMap;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -286,15 +291,20 @@ public class ExchangeRatesProvider extends ContentProvider {
     }
 
     public static ExchangeRate getExchangeRate(@Nonnull final Cursor cursor) {
-        final String codeId = getCurrencyCodeId(cursor);
+        /*final String codeId = getCurrencyCodeId(cursor);
         final CoinType type = CoinID.typeFromSymbol(cursor.getString(cursor.getColumnIndexOrThrow(ExchangeRatesProvider.KEY_RATE_COIN_CODE)));
         final Value rateCoin = Value.valueOf(type, cursor.getLong(cursor.getColumnIndexOrThrow(ExchangeRatesProvider.KEY_RATE_COIN)));
         final String fiatCode = cursor.getString(cursor.getColumnIndexOrThrow(ExchangeRatesProvider.KEY_RATE_FIAT_CODE));
-        final Value rateFiat = FiatValue.valueOf(fiatCode, cursor.getLong(cursor.getColumnIndexOrThrow(ExchangeRatesProvider.KEY_RATE_FIAT)));
+        final Value rateFiat = FiatValue.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("rate_fiat_code")), cursor.getString(cursor.getColumnIndexOrThrow("rate_fiat")));
         final String source = cursor.getString(cursor.getColumnIndexOrThrow(ExchangeRatesProvider.KEY_SOURCE));
 
         ExchangeRateBase rate = new ExchangeRateBase(rateCoin, rateFiat);
         return new ExchangeRate(rate, codeId, source);
+    }*/
+        String codeId = getCurrencyCodeId(cursor);
+        Value rateCoin = Value.valueOf(CoinID.typeFromSymbol(cursor.getString(cursor.getColumnIndexOrThrow("rate_coin_code"))), cursor.getString(cursor.getColumnIndexOrThrow("rate_coin")));
+        Value rateFiat = FiatValue.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("rate_fiat_code")), cursor.getString(cursor.getColumnIndexOrThrow("rate_fiat")));
+        return new ExchangeRate(new ExchangeRateBase(rateCoin, rateFiat), codeId, cursor.getString(cursor.getColumnIndexOrThrow("source")));
     }
 
     @Override
@@ -325,11 +335,9 @@ public class ExchangeRatesProvider extends ContentProvider {
 
         final long start = System.currentTimeMillis();
 
-        OkHttpClient client = NetworkUtils.getHttpClient(getContext().getApplicationContext());
-        Request request = new Request.Builder().url(url).build();
 
         try {
-            Response response = client.newCall(request).execute();
+            Response response = NetworkUtils.getHttpClient(getContext().getApplicationContext()).newCall(new Request.Builder().url(url).build()).execute();
             if (response.isSuccessful()) {
                 log.info("fetched exchange rates from {}, took {} ms", url,
                         System.currentTimeMillis() - start);

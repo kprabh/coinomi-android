@@ -15,7 +15,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
-
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.core.uri.CoinURI;
 import com.coinomi.core.uri.CoinURIParseException;
 import com.coinomi.core.wallet.WalletAccount;
@@ -30,8 +30,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.Unbinder;
 
 import static com.coinomi.wallet.util.UiUtils.toastGenericError;
 
@@ -51,18 +52,18 @@ public class AccountFragment extends Fragment {
     private static final int RECEIVE = 0;
     private static final int BALANCE = 1;
     private static final int SEND = 2;
-
+    private static final int CONTRACT = 3;
     // Handler ids
     private static final int SEND_TO_URI = 0;
 
     private int currentScreen;
-    @Bind(R.id.pager) ViewPager viewPager;
+    @BindView(R.id.pager) ViewPager viewPager;
     NavigationDrawerFragment mNavigationDrawerFragment;
     @Nullable private WalletAccount account;
     private Listener listener;
     private WalletApplication application;
     private final MyHandler handler = new MyHandler(this);
-
+    private Unbinder unbinder;
     public static AccountFragment getInstance() {
         AccountFragment fragment = new AccountFragment();
         fragment.setArguments(new Bundle());
@@ -91,7 +92,7 @@ public class AccountFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_account, container, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         mNavigationDrawerFragment = (NavigationDrawerFragment)
                 getFragmentManager().findFragmentById(R.id.navigation_drawer);
@@ -131,7 +132,7 @@ public class AccountFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
-        ButterKnife.unbind(this);
+        unbinder.unbind();
         mNavigationDrawerFragment = null;
         super.onDestroyView();
     }
@@ -190,6 +191,8 @@ public class AccountFragment extends Fragment {
                     break;
                 case SEND:
                     inflater.inflate(R.menu.send, menu);
+                    break;case CONTRACT:
+                    inflater.inflate(R.menu.contract_add_new, menu);
                     break;
             }
         }
@@ -250,6 +253,8 @@ public class AccountFragment extends Fragment {
                     break;
                 case SEND:
                     if (f instanceof SendFragment) return f;
+                    break; case CONTRACT:
+                    if (f instanceof ContractsFragment) return f;
                     break;
                 default:
                     throw new RuntimeException("Cannot get fragment, unknown screen item: " + item);
@@ -267,7 +272,8 @@ public class AccountFragment extends Fragment {
             case BALANCE:
                 return (T) BalanceFragment.newInstance(accountId);
             case SEND:
-                return (T) SendFragment.newInstance(accountId);
+                return (T) SendFragment.newInstance(accountId); case CONTRACT:
+                return (T) ContractsFragment.newInstance(accountId);
             default:
                 throw new RuntimeException("Cannot create fragment, unknown screen item: " + item);
         }
@@ -306,7 +312,8 @@ public class AccountFragment extends Fragment {
         private final String receiveTitle;
         private final String sendTitle;
         private final String balanceTitle;
-
+        private ContractsFragment contracts;
+        private final String contractsTitle;
         private AddressRequestFragment request;
         private SendFragment send;
         private BalanceFragment balance;
@@ -318,6 +325,7 @@ public class AccountFragment extends Fragment {
             receiveTitle = context.getString(R.string.wallet_title_request);
             sendTitle = context.getString(R.string.wallet_title_send);
             balanceTitle = context.getString(R.string.wallet_title_balance);
+            this.contractsTitle = context.getString(R.string.wallet_title_contracts);
             this.account = account;
         }
 
@@ -332,7 +340,9 @@ public class AccountFragment extends Fragment {
                     return send;
                 case BALANCE:
                     if (balance == null) balance = createFragment(account, i);
-                    return balance;
+                    return balance;case CONTRACT:
+                    if (contracts == null) contracts = createFragment(account, i);
+                    return contracts;
                 default:
                     throw new RuntimeException("Cannot get item, unknown screen item: " + i);
             }
@@ -341,7 +351,7 @@ public class AccountFragment extends Fragment {
 
         @Override
         public int getCount() {
-            return NUM_OF_SCREENS;
+            return this.account instanceof EthFamilyWallet ? 4 : 3;
         }
 
         @Override
@@ -349,7 +359,7 @@ public class AccountFragment extends Fragment {
             switch (i) {
                 case RECEIVE: return receiveTitle;
                 case SEND: return sendTitle;
-                case BALANCE: return balanceTitle;
+                case BALANCE: return balanceTitle;case CONTRACT: return contractsTitle;
                 default: throw new RuntimeException("Cannot get item, unknown screen item: " + i);
             }
         }
@@ -373,6 +383,6 @@ public class AccountFragment extends Fragment {
         void registerActionMode(ActionMode actionMode);
         void onReceiveSelected();
         void onBalanceSelected();
-        void onSendSelected();
+        void onSendSelected();void onContractsSelected();
     }
 }

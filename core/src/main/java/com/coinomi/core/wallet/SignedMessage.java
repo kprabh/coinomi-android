@@ -13,8 +13,8 @@ final public class SignedMessage {
         InvalidSigningAddress, InvalidMessageSignature
     }
 
-    final String message;
-    final String address;
+    public final String message;
+    public final String address;
     String signature;
     Status status = Status.Unknown;
 
@@ -34,7 +34,13 @@ final public class SignedMessage {
         signature = otherMessage.signature;
         status = newStatus;
     }
+    public void setStatus(Status status) {
+        this.status = status;
+    }
 
+    public void setSignature(String signature) {
+        this.signature = signature;
+    }
     public String getAddress() {
         return address;
     }

@@ -17,6 +17,7 @@ import org.bitcoinj.crypto.LazyECPoint;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Iterator;
 
 import javax.annotation.Nullable;
 
@@ -58,7 +59,18 @@ public class KeyUtils {
         protoKey.setPublicKey(ByteString.copyFrom(key.getPubKey()));
         return protoKey;
     }
-
+    public static Protos.Key.Builder serializeKey(DeterministicKey key) {
+        Protos.Key.Builder protoKey = serializeEncryptableItem(key);
+        protoKey.setPublicKey(ByteString.copyFrom(key.getPubKey()));
+        protoKey.setType(Protos.Key.Type.DETERMINISTIC_KEY);
+        Protos.DeterministicKey.Builder detKey = protoKey.getDeterministicKeyBuilder();
+        detKey.setChainCode(ByteString.copyFrom(key.getChainCode()));
+        Iterator it = key.getPath().iterator();
+        while (it.hasNext()) {
+            detKey.addPath(((ChildNumber) it.next()).i());
+        }
+        return protoKey;
+    }
     public static DeterministicKey getDeterministicKey(Protos.Key key,
                                                        @Nullable DeterministicKey parent,
                                                        @Nullable KeyCrypter crypter) {

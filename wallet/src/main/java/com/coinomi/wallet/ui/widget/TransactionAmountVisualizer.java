@@ -20,7 +20,6 @@ import com.coinomi.wallet.R;
 import com.google.common.collect.ImmutableList;
 
 import java.util.List;
-import java.util.Map;
 
 import javax.annotation.Nullable;
 

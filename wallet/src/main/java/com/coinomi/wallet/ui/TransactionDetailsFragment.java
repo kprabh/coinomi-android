@@ -20,15 +20,21 @@ import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
+import com.coinomi.core.wallet.families.eth.EthTransaction;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
+import com.coinomi.wallet.ui.widget.SponsorView;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.TimeUtils;
 import com.coinomi.wallet.util.UiUtils;
 import com.coinomi.wallet.util.WeakHandler;
 
 import org.acra.ACRA;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +51,7 @@ public class TransactionDetailsFragment extends Fragment {
     private String accountId;
     private AbstractWallet pocket;
     private CoinType type;
-
+    private SponsorView sponsorView;
     private ListView outputRows;
     private TransactionAmountVisualizerAdapter adapter;
     private TextView txStatusView;
@@ -78,7 +84,7 @@ public class TransactionDetailsFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (getArguments() != null) {
-            accountId = getArguments().getString(Constants.ARG_ACCOUNT_ID);
+            accountId = getArguments().getString(Constants.ARG_ACCOUNT_ID);txId = getArguments().getString("transaction_id");
         }
         pocket = (AbstractWallet) getWalletApplication().getAccount(accountId);
         if (pocket == null) {
@@ -111,7 +117,7 @@ public class TransactionDetailsFragment extends Fragment {
         txMessageLabel = (TextView) footer.findViewById(R.id.tx_message_label);
         txMessage = (TextView) footer.findViewById(R.id.tx_message);
         blockExplorerLink = (TextView) footer.findViewById(R.id.block_explorer_link);
-
+        sponsorView = (SponsorView) footer.findViewById(R.id.sponsor_view);
         pocket.addEventListener(walletListener);
 
         adapter = new TransactionAmountVisualizerAdapter(inflater.getContext(), pocket);
@@ -120,10 +126,12 @@ public class TransactionDetailsFragment extends Fragment {
         txId = getArguments().getString(Constants.ARG_TRANSACTION_ID);
 
         updateView();
-
+        setupSponsor();
         return view;
     }
-
+    private void setupSponsor() {
+        this.sponsorView.setup(this.type.getId());
+    }
     private AdapterView.OnItemClickListener getListener() {
         return new AdapterView.OnItemClickListener() {
             @Override
@@ -203,7 +211,45 @@ public class TransactionDetailsFragment extends Fragment {
                     txMessage.setVisibility(View.VISIBLE);
                 }
             } catch (Exception e) {
+                if (ACRA.isInitialised()) {
                 ACRA.getErrorReporter().handleSilentException(e);
+            }
+        }
+    }
+        if (tx instanceof EthTransaction) {
+            JSONObject logsObj = ((EthTransaction) tx).getLogs((EthFamilyWallet) pocket); try {
+            if (logsObj.has("parsed") && logsObj.getBoolean("parsed")) {
+                this.txMessageLabel.setText(getString(R.string.eth_tx_logs));
+                this.txMessageLabel.setVisibility(View.VISIBLE);
+                this.txMessage.setText(logsObj.toString());
+                this.txMessage.setVisibility(View.VISIBLE);
+                return;
+            }
+
+                JSONArray logs = logsObj.getJSONArray("logs");
+                if (logs.length() > 0) {
+                    StringBuilder logsPretify = new StringBuilder();
+                    for (int j = 0; j < logs.length(); j++) {
+                        try {
+                            JSONObject log = logs.getJSONObject(j);
+                            JSONArray topics = log.getJSONArray("topics");
+                            logsPretify.append(getString(R.string.eth_logs_topic) + ":\t");
+                            for (int i = 0; i < topics.length(); i++) {
+                                logsPretify.append("[" + i + "] " + topics.getString(i) + " \n");
+                            }
+                            logsPretify.append(getString(R.string.eth_logs_data) + ":\t");
+                            logsPretify.append(log.getString("data"));
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    this.txMessageLabel.setText(getString(R.string.eth_tx_logs));
+                    this.txMessageLabel.setVisibility(View.VISIBLE);
+                    this.txMessage.setText(logsPretify);
+                    this.txMessage.setVisibility(View.VISIBLE);
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
             }
         }
     }

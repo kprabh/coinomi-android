@@ -30,10 +30,13 @@ public interface ValueType extends Serializable {
 
     Value value(long units);
 
-    MonetaryFormat getMonetaryFormat();
+    MonetaryFormat getMoneyFormat();
     MonetaryFormat getPlainFormat();
 
     boolean equals(ValueType obj);
 
     Value value(String string);
+
+
+    Value zeroCoin();
 }

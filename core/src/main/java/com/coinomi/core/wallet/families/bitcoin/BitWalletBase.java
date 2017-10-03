@@ -16,13 +16,12 @@
  * limitations under the License.
  */
 
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.exceptions.AddressMalformedException;
-import com.coinomi.core.wallet.families.bitcoin.BitAddress;
-import com.coinomi.core.wallet.families.bitcoin.BitSendRequest;
+import com.coinomi.core.wallet.*;
 
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.InsufficientMoneyException;
@@ -115,23 +114,23 @@ abstract public class BitWalletBase extends TransactionWatcherWallet implements 
                 BitAddress address = BitAddress.from(type, unsignedMessage.getAddress());
                 key = findKeyFromPubHash(address.getHash160());
             } catch (AddressMalformedException e) {
-                unsignedMessage.status = SignedMessage.Status.AddressMalformed;
+                unsignedMessage.setStatus(SignedMessage.Status.AddressMalformed);
                 return;
             }
 
             if (key == null) {
-                unsignedMessage.status = SignedMessage.Status.MissingPrivateKey;
+                unsignedMessage.setStatus(SignedMessage.Status.MissingPrivateKey);
                 return;
             }
 
             try {
-                unsignedMessage.signature =
-                        key.signMessage(type.getSignedMessageHeader(), message, aesKey);
-                unsignedMessage.status = SignedMessage.Status.SignedOK;
+                unsignedMessage.setSignature(
+                        key.signMessage(type.getSignedMessageHeader(), message, aesKey));
+                unsignedMessage.setStatus(SignedMessage.Status.SignedOK);
             } catch (ECKey.KeyIsEncryptedException e) {
-                unsignedMessage.status = SignedMessage.Status.KeyIsEncrypted;
+                unsignedMessage.setStatus(SignedMessage.Status.KeyIsEncrypted);
             } catch (ECKey.MissingPrivateKeyException e) {
-                unsignedMessage.status = SignedMessage.Status.MissingPrivateKey;
+                unsignedMessage.setStatus(SignedMessage.Status.MissingPrivateKey);
             }
         } finally {
             lock.unlock();
@@ -142,17 +141,17 @@ abstract public class BitWalletBase extends TransactionWatcherWallet implements 
     public void verifyMessage(SignedMessage signedMessage) {
         try {
             ECKey pubKey = ECKey.signedMessageToKey(
-                    type.getSignedMessageHeader(), signedMessage.message, signedMessage.signature);
+                    type.getSignedMessageHeader(), signedMessage.message, signedMessage.getSignature());
             byte[] expectedPubKeyHash = BitAddress.from(type, signedMessage.address).getHash160();
             if (Arrays.equals(expectedPubKeyHash, pubKey.getPubKeyHash())) {
-                signedMessage.status = SignedMessage.Status.VerifiedOK;
+                signedMessage.setStatus(SignedMessage.Status.VerifiedOK);
             } else {
-                signedMessage.status = SignedMessage.Status.InvalidSigningAddress;
+                signedMessage.setStatus(SignedMessage.Status.InvalidSigningAddress);
             }
         } catch (SignatureException e) {
-            signedMessage.status = SignedMessage.Status.InvalidMessageSignature;
+            signedMessage.setStatus(SignedMessage.Status.InvalidMessageSignature);
         } catch (AddressMalformedException e) {
-            signedMessage.status = SignedMessage.Status.AddressMalformed;
+            signedMessage.setStatus(SignedMessage.Status.AddressMalformed);
         }
     }
 
@@ -167,14 +166,14 @@ abstract public class BitWalletBase extends TransactionWatcherWallet implements 
     }
 
     @Override
-    public SendRequest getEmptyWalletRequest(AbstractAddress destination)
+    public SendRequest getEmptyWalletRequest(AbstractAddress destination, byte[] contractData)
             throws WalletAccountException {
         checkAddress(destination);
         return BitSendRequest.emptyWallet((BitAddress) destination);
     }
 
     @Override
-    public SendRequest getSendToRequest(AbstractAddress destination, Value amount)
+    public SendRequest getSendToRequest(AbstractAddress destination, Value amount, byte[] contractData)
             throws WalletAccountException {
         checkAddress(destination);
         return BitSendRequest.to((BitAddress) destination, amount);

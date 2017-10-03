@@ -29,6 +29,7 @@ public class FiatType implements ValueType {
     private final String currencyCode;
     private transient Value oneCoin;
     private transient MonetaryFormat friendlyFormat;
+    private transient Value zeroCoin;
 
     public FiatType(final String currencyCode, @Nullable final String name) {
         this.name = name != null ? name : "";
@@ -71,6 +72,13 @@ public class FiatType implements ValueType {
         return oneCoin;
     }
 
+    public Value zeroCoin() {
+        if (this.zeroCoin == null) {
+            this.zeroCoin = Value.valueOf(this, 0);
+        }
+        return this.zeroCoin;
+    }
+
     @Override
     public Value getMinNonDust() {
         return value(1);
@@ -92,7 +100,7 @@ public class FiatType implements ValueType {
     }
 
     @Override
-    public MonetaryFormat getMonetaryFormat() {
+    public MonetaryFormat getMoneyFormat() {
         if (friendlyFormat == null) {
             friendlyFormat = FRIENDLY_FORMAT.code(0, currencyCode);
         }

@@ -1,4 +1,4 @@
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
@@ -10,14 +10,7 @@ import com.coinomi.core.network.ServerClient.UnspentTx;
 import com.coinomi.core.network.interfaces.BlockchainConnection;
 import com.coinomi.core.network.interfaces.TransactionEventListener;
 import com.coinomi.core.util.BitAddressUtils;
-import com.coinomi.core.wallet.families.bitcoin.BitAddress;
-import com.coinomi.core.wallet.families.bitcoin.BitBlockchainConnection;
-import com.coinomi.core.wallet.families.bitcoin.BitTransaction;
-import com.coinomi.core.wallet.families.bitcoin.BitTransactionEventListener;
-import com.coinomi.core.wallet.families.bitcoin.BitWalletTransaction;
-import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
-import com.coinomi.core.wallet.families.bitcoin.TrimmedOutPoint;
-import com.coinomi.core.wallet.families.bitcoin.TrimmedTransaction;
+import com.coinomi.core.wallet.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -52,6 +45,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nullable;
 
@@ -240,7 +234,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         }
     }
 
-    boolean trimTransactionIfNeeded(Sha256Hash hash) {
+    public boolean trimTransactionIfNeeded(Sha256Hash hash) {
         lock.lock();
         try {
             return trimTransaction(hash);
@@ -249,6 +243,14 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         }
     }
 
+    public void setUTXO(OutPointOutput utxo) {
+        this.lock.lock();
+        try {
+            this.unspentOutputs.put(utxo.getOutPoint(), utxo);
+        } finally {
+            this.lock.unlock();
+        }
+    }
     /**
      * Remove irrelevant inputs and outputs. Returns true if transaction trimmed.
      */
@@ -292,7 +294,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
             return false;
         }
 
-        Transaction txFull = transaction.getRawTransaction();
+        /*Transaction txFull = transaction.getRawTransaction();
         List<TransactionOutput> outputs = txFull.getOutputs();
 
         TrimmedTransaction tx = new TrimmedTransaction(type, hash, outputs.size());
@@ -339,7 +341,10 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         removeTransaction(hash);
 
         simpleAddTransaction(txPool,
-                BitTransaction.fromTrimmed(hash, tx, valueSent, valueReceived, fee));
+                BitTransaction.fromTrimmed(hash, tx, valueSent, valueReceived, fee));*/
+        BitTransaction trimmedTx = transaction.toTrimmed(this);
+        removeTransaction(hash);
+        simpleAddTransaction(txPool, trimmedTx);
         return true;
     }
 
@@ -681,7 +686,18 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
             lock.unlock();
         }
     }
-
+    public void estimateFee(int blocks, TxFeeEventListener listener) {
+        if (this.blockchainConnection == null) {
+            listener.onFeeEstimate(this.type.oneCoin().negate());
+            return;
+        }
+        this.lock.lock();
+        try {
+            this.blockchainConnection.estimateFee(blocks, listener);
+        } finally {
+            this.lock.unlock();
+        }
+    }
     /**
      * Returns all the addresses that are not currently watched
      */
@@ -1611,5 +1627,18 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         } finally {
             lock.unlock();
         }
+    }
+
+    public void resetAddressesStatus() {
+        this.lock.lock();
+        try {
+            this.addressesStatus.clear();
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    ReentrantLock getLock() {
+        return this.lock;
     }
 }

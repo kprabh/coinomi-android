@@ -21,6 +21,7 @@ import android.widget.Toast;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.util.GenericUtils;
+import com.coinomi.core.util.MonetaryFormat;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.core.wallet.WalletAccount;
@@ -33,6 +34,7 @@ import com.coinomi.wallet.ExchangeRatesProvider.ExchangeRate;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.widget.Amount;
+import com.coinomi.wallet.ui.widget.SponsorView;
 import com.coinomi.wallet.ui.widget.SwipeRefreshLayout;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.WeakHandler;
@@ -49,14 +51,12 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
-
 import javax.annotation.Nonnull;
-
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.OnItemClick;
-
+import butterknife.Unbinder;
 /**
  * Use the {@link BalanceFragment#newInstance} factory method to
  * create an instance of this fragment.
@@ -79,7 +79,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     private String accountId;
     private WalletAccount pocket;
     private CoinType type;
-    private Coin currentBalance;
+    private Value currentBalance;
     private ExchangeRate exchangeRate;
 
     private boolean isFullAmount = false;
@@ -87,17 +87,21 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     private Configuration config;
     private final MyHandler handler = new MyHandler(this);
     private final ContentObserver addressBookObserver = new AddressBookObserver(handler);
-
-            @Bind(R.id.transaction_rows) ListView transactionRows;
-    @Bind(R.id.swipeContainer) SwipeRefreshLayout swipeContainer;
-    @Bind(R.id.history_empty) View emptyPocketMessage;
-    @Bind(R.id.account_balance) Amount accountBalance;
-    @Bind(R.id.account_exchanged_balance) Amount accountExchangedBalance;
-    @Bind(R.id.connection_label) TextView connectionLabel;
+    @BindView(2131689680)
+    TextView blockHeight;
+    @BindView(R.id.transaction_rows) ListView transactionRows;
+    @BindView(R.id.swipeContainer) SwipeRefreshLayout swipeContainer;
+    @BindView(R.id.history_empty) View emptyPocketMessage;
+    @BindView(R.id.account_balance) Amount accountBalance;
+    @BindView(R.id.account_exchanged_balance) Amount accountExchangedBalance;
+    @BindView(R.id.connection_label) TextView connectionLabel;
     private TransactionsListAdapter adapter;
     private Listener listener;
-    private ContentResolver resolver;
-
+    private ContentResolver resolver;    private MonetaryFormat shortMonetaryFormat;
+    @BindView(2131689681)
+    SponsorView sponsorView;
+    private Unbinder unbinder;
+    private MonetaryFormat fullMonetaryFormat;
     /**
      * Use this factory method to create a new instance of
      * this fragment using the provided parameters.
@@ -133,7 +137,9 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
             Toast.makeText(getActivity(), R.string.no_such_pocket_error, Toast.LENGTH_LONG).show();
             return;
         }
-        type = pocket.getCoinType();
+        this.type = this.pocket.getCoinType();
+        this.fullMonetaryFormat = this.type.getMoneyFormat();
+        this.shortMonetaryFormat = this.type.getMoneyFormat().minDecimals(2).optionalDecimals(2);
     }
 
     @Override
@@ -142,10 +148,10 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_balance, container, false);
         addHeaderAndFooterToList(inflater, container, view);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         setupSwipeContainer();
-
+        setupSponsor();
         // TODO show empty message
         // Hide empty message if have some transaction history
         if (pocket.getTransactions().size() > 0) {
@@ -161,11 +167,13 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
 
         return view;
     }
-
+    private void setupSponsor() {
+        this.sponsorView.setup(this.type.getId());
+    }
     @Override
     public void onDestroyView() {
         adapter = null;
-        ButterKnife.unbind(this);
+        unbinder.unbind();
         super.onDestroyView();
     }
 
@@ -275,7 +283,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     }
 
     private void updateBalance(final Value newBalance) {
-        currentBalance = newBalance.toCoin();
+        currentBalance = newBalance;
 
         updateView();
     }
@@ -493,14 +501,13 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         if (isRemoving() || isDetached()) return;
 
         if (currentBalance != null) {
-            String newBalanceStr = GenericUtils.formatCoinValue(type, currentBalance,
-                    isFullAmount ? AMOUNT_FULL_PRECISION : AMOUNT_SHORT_PRECISION, AMOUNT_SHIFT);
+            String newBalanceStr = GenericUtils.formatValue(this.isFullAmount ? this.fullMonetaryFormat : this.shortMonetaryFormat, this.currentBalance);
             accountBalance.setAmount(newBalanceStr);
         }
 
         if (currentBalance != null && exchangeRate != null && getView() != null) {
             try {
-                Value fiatAmount = exchangeRate.rate.convert(type, currentBalance);
+                Value fiatAmount = exchangeRate.rate.convert(currentBalance);
                 accountExchangedBalance.setAmount(GenericUtils.formatFiatValue(fiatAmount));
                 accountExchangedBalance.setSymbol(fiatAmount.type.getSymbol());
             } catch (Exception e) {
@@ -511,7 +518,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         }
 
         swipeContainer.setRefreshing(pocket.isLoading());
-
+        this.blockHeight.setText(getResources().getString(R.string.block_height, new Object[]{String.valueOf(getAccount().getLastBlockSeenHeight())}));
         if (adapter != null) adapter.clearLabelCache();
     }
 

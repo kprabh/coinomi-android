@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 /**
  * @author John L. Jegutanis
  */
-public interface BlockchainConnection<T> {
+public interface BlockchainConnection<T> extends ClientConnection {
     void getBlock(int height, TransactionEventListener<T> listener);
 
     void subscribeToBlockchain(final TransactionEventListener<T> listener);
@@ -27,18 +27,5 @@ public interface BlockchainConnection<T> {
     void broadcastTx(final T tx, final TransactionEventListener<T> listener);
 
     boolean broadcastTxSync(final T tx);
-
-    void ping(@Nullable String versionString);
-
-    void addEventListener(ConnectionEventListener listener);
-
-    void resetConnection();
-
-    void stopAsync();
-
-    boolean isActivelyConnected();
-
-    void startAsync();
-
 
 }

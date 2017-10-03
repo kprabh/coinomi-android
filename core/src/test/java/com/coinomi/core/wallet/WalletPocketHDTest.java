@@ -22,8 +22,11 @@ import com.coinomi.core.wallet.families.bitcoin.BitBlockchainConnection;
 import com.coinomi.core.wallet.families.bitcoin.BitSendRequest;
 import com.coinomi.core.wallet.families.bitcoin.BitTransaction;
 import com.coinomi.core.wallet.families.bitcoin.BitTransactionEventListener;
+import com.coinomi.core.wallet.families.bitcoin.BitWalletSingleKey;
 import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
 import com.coinomi.core.wallet.families.bitcoin.TrimmedOutPoint;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketProtobufSerializer;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.ChildMessage;

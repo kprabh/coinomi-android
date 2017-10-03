@@ -8,8 +8,10 @@ import android.widget.BaseAdapter;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
 import com.coinomi.core.util.GenericUtils;
+import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
@@ -62,7 +64,10 @@ public class TransactionAmountVisualizerAdapter extends BaseAdapter {
                     // TODO review the following
                     outputs.add(new AbstractOutput(tx.getReceivedFrom().get(0), tx.getValue(pocket)));
                     break;
-                }
+            } else {
+                if (this.pocket.getCoinType() instanceof EthFamily) {
+                    this.outputs.add(new AbstractOutput((AbstractAddress) tx.getReceivedFrom().get(0), tx.getValue(this.pocket)));
+                }}
                 // When receiving hide outputs that are not ours
                 if (!pocket.isAddressMine(output.getAddress())) continue;
             }

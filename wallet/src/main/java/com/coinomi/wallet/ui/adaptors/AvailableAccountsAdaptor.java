@@ -7,7 +7,6 @@ import android.widget.BaseAdapter;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.wallet.WalletAccount;
-import com.coinomi.core.wallet.WalletPocketHD;
 import com.coinomi.wallet.ui.widget.NavDrawerItemView;
 import com.coinomi.wallet.util.WalletUtils;
 import com.google.common.collect.ImmutableList;

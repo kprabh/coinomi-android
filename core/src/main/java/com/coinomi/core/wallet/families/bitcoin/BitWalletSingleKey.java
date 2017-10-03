@@ -1,11 +1,14 @@
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
-import com.coinomi.core.wallet.families.bitcoin.BitAddress;
+import com.coinomi.core.exceptions.ResetKeyException;
+import com.coinomi.core.wallet.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.crypto.ChildNumber;
+import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.script.Script;
 import org.bitcoinj.wallet.RedeemData;
@@ -24,7 +27,7 @@ import static com.coinomi.core.Preconditions.checkNotNull;
  */
 public class BitWalletSingleKey extends BitWalletBase {
     private static final Logger log = LoggerFactory.getLogger(WalletPocketHD.class);
-
+    private static final ImmutableList<ChildNumber> EMPTY_PATH = ImmutableList.of();
     @VisibleForTesting
     protected SimpleKeyChain keys;
 
@@ -53,7 +56,15 @@ public class BitWalletSingleKey extends BitWalletBase {
             lock.unlock();
         }
     }
-
+    public boolean isStandardPath() {
+        return false;
+    }
+    public int getAccountIndex() {
+        return 0;
+    }
+    public ImmutableList<ChildNumber> getDeterministicRootKeyPath() {
+        return EMPTY_PATH;
+    }
     public BitAddress getAddress() {
         lock.lock();
         try {
@@ -62,7 +73,22 @@ public class BitWalletSingleKey extends BitWalletBase {
             lock.unlock();
         }
     }
+    public boolean hasPrivKey() {
+        for (ECKey k : this.keys.getKeys()) {
+            if (k.hasPrivKey()) {
+                return true;
+            }
+        }
+        return false;
+    }
 
+    public DeterministicKey getDeterministicRootKey() throws UnsupportedOperationException {
+        throw new UnsupportedOperationException(com.coinomi.core.wallet.families.bitcoin.BitWalletSingleKey.class + " does not support deterministic keys");
+    }
+
+    public void resetRootKey(DeterministicKey key) throws UnsupportedOperationException, ResetKeyException {
+        throw new UnsupportedOperationException(com.coinomi.core.wallet.families.bitcoin.BitWalletSingleKey.class + " does not support deterministic keys");
+    }
     @Override
     public AbstractAddress getChangeAddress() {
         return getReceiveAddress();

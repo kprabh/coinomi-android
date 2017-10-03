@@ -159,7 +159,7 @@ public class FinalizeWalletRestorationFragment extends Fragment {
 
                 for (CoinType type : coinsToCreate) {
                     this.publishProgress(type.getName());
-                    wallet.createAccount(type, false, aesKey);
+                    wallet.createAccount(type, aesKey);
                 }
 
                 walletApplication.setWallet(wallet);
@@ -220,5 +220,22 @@ public class FinalizeWalletRestorationFragment extends Fragment {
         Toast.makeText(getActivity(), errorMessage, Toast.LENGTH_LONG).show();
         startActivity(new Intent(getActivity(), IntroActivity.class));
         getActivity().finish();
+    } static /* synthetic */ class AnonymousClass1 {
+        static final /* synthetic */ int[] $SwitchMap$android$os$AsyncTask$Status = new int[AsyncTask.Status.values().length];
+
+        static {
+            try {
+                $SwitchMap$android$os$AsyncTask$Status[AsyncTask.Status.FINISHED.ordinal()] = 1;
+            } catch (NoSuchFieldError e) {
+            }
+            try {
+                $SwitchMap$android$os$AsyncTask$Status[AsyncTask.Status.RUNNING.ordinal()] = 2;
+            } catch (NoSuchFieldError e2) {
+            }
+            try {
+                $SwitchMap$android$os$AsyncTask$Status[AsyncTask.Status.PENDING.ordinal()] = 3;
+            } catch (NoSuchFieldError e3) {
+            }
+        }
     }
 }

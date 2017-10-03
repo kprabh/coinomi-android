@@ -29,6 +29,7 @@ import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.adaptors.AccountListAdapter;
 import com.coinomi.wallet.ui.widget.Amount;
+import com.coinomi.wallet.ui.widget.SponsorView;
 import com.coinomi.wallet.ui.widget.SwipeRefreshLayout;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.UiUtils;
@@ -41,7 +42,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
-import butterknife.Bind;
+import butterknife.Unbinder;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.OnItemClick;
@@ -82,6 +84,8 @@ public class OverviewFragment extends Fragment{
         }
     }
 
+    @BindView(2131689681)
+    SponsorView sponsorView;
     private Wallet wallet;
     private Value currentBalance;
 
@@ -92,10 +96,10 @@ public class OverviewFragment extends Fragment{
     private AccountListAdapter adapter;
     Map<String, ExchangeRate> exchangeRates;
     private NavigationDrawerFragment mNavigationDrawerFragment;
-
-    @Bind(R.id.swipeContainer) SwipeRefreshLayout swipeContainer;
-    @Bind(R.id.account_rows) ListView accountRows;
-    @Bind(R.id.account_balance) Amount mainAmount;
+    private Unbinder unbinder;
+    @BindView(R.id.swipeContainer) SwipeRefreshLayout swipeContainer;
+    @BindView(R.id.account_rows) ListView accountRows;
+    @BindView(R.id.account_balance) Amount mainAmount;
 
     private Listener listener;
 
@@ -131,7 +135,7 @@ public class OverviewFragment extends Fragment{
         View header = inflater.inflate(R.layout.fragment_overview_header, null);
         accountRows = ButterKnife.findById(view, R.id.account_rows);
         accountRows.addHeaderView(header, null, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         if (wallet == null) {
             return view;
@@ -162,14 +166,17 @@ public class OverviewFragment extends Fragment{
         adapter = new AccountListAdapter(inflater.getContext(), wallet);
         accountRows.setAdapter(adapter);
         adapter.setExchangeRates(exchangeRates);
-
+        setupSponsor();
         return view;
+    }
+    private void setupSponsor() {
+        sponsorView.setup("overview");
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        ButterKnife.unbind(this);
+        unbinder.unbind();
     }
 
     private final ThrottlingWalletChangeListener walletChangeListener = new ThrottlingWalletChangeListener() {
@@ -242,7 +249,7 @@ public class OverviewFragment extends Fragment{
     }
 
     @OnItemClick(R.id.account_rows)
-    public void onAmountClick(int position) {
+    public void onAccountClick(int position) {
         if (position >= accountRows.getHeaderViewsCount()) {
             // Note the usage of getItemAtPosition() instead of adapter's getItem() because
             // the latter does not take into account the header (which has position 0).
@@ -257,7 +264,7 @@ public class OverviewFragment extends Fragment{
     }
 
     @OnItemLongClick(R.id.account_rows)
-    public boolean onAmountLongClick(int position) {
+    public boolean onAccountLongClick(int position) {
         if (position >= accountRows.getHeaderViewsCount()) {
             // Note the usage of getItemAtPosition() instead of adapter's getItem() because
             // the latter does not take into account the header (which has position 0).

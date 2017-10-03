@@ -3,13 +3,19 @@ package com.coinomi.core.wallet;
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.families.BitFamily;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
 import com.coinomi.core.protos.Protos;
 import com.coinomi.core.util.KeyUtils;
 import com.coinomi.core.wallet.families.bitcoin.BitTransaction;
 import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketProtobufSerializer;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
+import com.coinomi.core.wallet.families.eth.EthFamilyWalletProtobufSerializer;
 import com.coinomi.core.wallet.families.nxt.NxtFamilyWallet;
 import com.coinomi.core.wallet.families.nxt.NxtFamilyWalletProtobufSerializer;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
@@ -22,9 +28,10 @@ import org.bitcoinj.crypto.EncryptedData;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.DeterministicSeed;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -116,6 +123,8 @@ public class WalletProtobufSerializer {
                 pocketProto = WalletPocketProtobufSerializer.toProtobuf((WalletPocketHD) account);
             } else if (account instanceof NxtFamilyWallet) {
                 pocketProto = NxtFamilyWalletProtobufSerializer.toProtobuf((NxtFamilyWallet) account);
+            } else if (account instanceof EthFamilyWallet) {
+                pocketProto = EthFamilyWalletProtobufSerializer.toProtobuf((EthFamilyWallet) account);
             } else {
                 throw new RuntimeException("Implement serialization for: " + account.getClass());
             }
@@ -149,10 +158,10 @@ public class WalletProtobufSerializer {
      *
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
-    public static Wallet readWallet(InputStream input) throws UnreadableWalletException {
+    public static Wallet readWallet(InputStream input, File dbFolder) throws UnreadableWalletException {
         try {
             Protos.Wallet walletProto = parseToProto(input);
-            return readWallet(walletProto);
+            return readWallet(walletProto, dbFolder);
         } catch (IOException e) {
             throw new UnreadableWalletException("Could not parse input stream to protobuf", e);
         }
@@ -169,8 +178,8 @@ public class WalletProtobufSerializer {
      *
      * @throws UnreadableWalletException thrown in various error conditions (see description).
      */
-    public static Wallet readWallet(Protos.Wallet walletProto) throws UnreadableWalletException {
-        if (walletProto.getVersion() > 3)
+    public static Wallet readWallet(Protos.Wallet walletProto, File dbFolder) throws UnreadableWalletException {
+        if (walletProto.getVersion() > 4)
             throw new UnreadableWalletException.FutureVersion();
 
         walletProto = applyProtoUpdates(walletProto);
@@ -198,13 +207,14 @@ public class WalletProtobufSerializer {
                 KeyUtils.getDeterministicKey(walletProto.getMasterKey(), null, crypter);
 
         Wallet wallet = new Wallet(masterKey, seed);
-
+        wallet.setDbFolder(dbFolder);
         if (walletProto.hasVersion()) {
             wallet.setVersion(walletProto.getVersion());
         }
 
         WalletPocketProtobufSerializer pocketSerializer = new WalletPocketProtobufSerializer();
         NxtFamilyWalletProtobufSerializer nxtPocketSerializer = new NxtFamilyWalletProtobufSerializer();
+        EthFamilyWalletProtobufSerializer ethPocketSerializer = new EthFamilyWalletProtobufSerializer();
         for (Protos.WalletPocket pocketProto : walletProto.getPocketsList()) {
             CoinType type = getType(pocketProto);
             AbstractWallet pocket;
@@ -213,6 +223,8 @@ public class WalletProtobufSerializer {
                 pocket = pocketSerializer.readWallet(pocketProto, crypter);
             } else if (type instanceof NxtFamily) {
                 pocket = nxtPocketSerializer.readWallet(pocketProto, crypter);
+            } else if (type instanceof EthFamily) {
+                pocket = ethPocketSerializer.readWallet(pocketProto, crypter);
             } else {
                 throw new UnreadableWalletException("Unsupported type " + type);
             }
@@ -233,6 +245,9 @@ public class WalletProtobufSerializer {
         if (walletProto.getVersion() < 3) {
             walletProto = updateV2toV3Proto(walletProto);
         }
+        if (walletProto.getVersion() < 4) {
+            return updateV3toV4Proto(walletProto);
+        }
         return walletProto;
     }
 
@@ -243,6 +258,9 @@ public class WalletProtobufSerializer {
 
         if (wallet.getVersion() < 3) {
             updateV2toV3(wallet);
+        }
+        if (wallet.getVersion() < 4) {
+            updateV3toV4(wallet);
         }
     }
 
@@ -285,10 +303,29 @@ public class WalletProtobufSerializer {
         return crypter;
     }
 
+    private static Protos.Wallet updateV3toV4Proto(Protos.Wallet walletProto) {
+        checkState(walletProto.getVersion() < 4, "Can update only from version < 4");
+        Protos.Wallet.Builder b = walletProto.toBuilder();
+        while (true) {
+            int i = 0;
+            while (i < b.getPocketsCount()) {
+                if (b.getPocketsBuilder(i).getNetworkIdentifier().equals("abncoin.main")) {
+                    b.removePockets(i);
+                } else {
+                    i++;
+                }
+            }
+            return b.build();
+        }
+    }
+    private static void updateV3toV4(Wallet wallet) {
+        Preconditions.checkState(wallet.getVersion() < 4, "Can update only from version < 3");
+        wallet.setVersion(4);
+    }
 
     /**
      * Returns the loaded protocol buffer from the given byte stream. You normally want
-     * {@link Wallet#loadFromFile(java.io.File)} instead - this method is designed for low level work involving the
+     * {@link Wallet#(java.io.File)} instead - this method is designed for low level work involving the
      * wallet file format itself.
      */
     public static Protos.Wallet parseToProto(InputStream input) throws IOException {
@@ -347,11 +384,11 @@ public class WalletProtobufSerializer {
             if (walletAccount instanceof WalletPocketHD) {
                 WalletPocketHD account = (WalletPocketHD) walletAccount;
                 // Force resync
-                account.addressesStatus.clear();
+                account.resetAddressesStatus();
                 // Gather hashes to trim them later
-                Set<Sha256Hash> txHashes = new HashSet<>(account.rawTransactions.size());
+                Set<Sha256Hash> txHashes = new HashSet<>(account.getTransactions().size());
                 // Reconstruct UTXO set
-                for (BitTransaction tx : account.rawTransactions.values()) {
+                for (BitTransaction tx : account.getTransactions().values()) {
                     txHashes.add(tx.getHash());
                     for (TransactionOutput txo : tx.getOutputs()) {
                         if (txo.isAvailableForSpending() && txo.isMineOrWatched(account)) {
@@ -360,7 +397,7 @@ public class WalletProtobufSerializer {
                                 utxo.setAppearedAtChainHeight(tx.getAppearedAtChainHeight());
                                 utxo.setDepthInBlocks(tx.getDepthInBlocks());
                             }
-                            account.unspentOutputs.put(utxo.getOutPoint(), utxo);
+                            account.setUTXO(utxo);
                         }
                     }
                 }

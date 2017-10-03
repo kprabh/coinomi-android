@@ -15,6 +15,7 @@ import android.support.v7.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.coinomi.core.uri.CoinURI;
@@ -100,7 +101,10 @@ public class UiUtils {
     public static void setVisibility(View view, int visibility) {
         if (view.getVisibility() != visibility) view.setVisibility(visibility);
     }
-
+    public static void setTextAndVisible(TextView textView, String message) {
+        textView.setText(message);
+        setVisible(textView);
+    }
     public static ActionMode startActionMode(final Activity activity, final ActionMode.Callback callback) {
         if (activity == null || !(activity instanceof AppCompatActivity)) {
             log.warn("To show action mode, your activity must extend " + AppCompatActivity.class);

@@ -6,7 +6,10 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
@@ -22,10 +25,15 @@ import android.widget.MultiAutoCompleteTextView;
 import android.widget.TextView;
 
 import com.coinomi.core.CoreUtils;
+import com.coinomi.core.Preconditions;
+import com.coinomi.core.wallet.Wallet;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
+import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.util.Fonts;
 import com.coinomi.wallet.util.Keyboard;
+import com.coinomi.wallet.util.UiUtils;
+import com.coinomi.wallet.util.WeakHandler;
 
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.crypto.MnemonicException;
@@ -36,6 +44,8 @@ import java.util.ArrayList;
 
 import javax.annotation.Nullable;
 
+import butterknife.ButterKnife;
+
 /**
  * A simple {@link Fragment} subclass.
  *
@@ -43,7 +53,7 @@ import javax.annotation.Nullable;
 public class RestoreFragment extends Fragment {
     private static final Logger log = LoggerFactory.getLogger(RestoreFragment.class);
     private static final int REQUEST_CODE_SCAN = 0;
-
+    private WalletApplication app;
     private MultiAutoCompleteTextView mnemonicTextView;
     @Nullable private String seed;
     private boolean isNewSeed;
@@ -52,15 +62,26 @@ public class RestoreFragment extends Fragment {
     private boolean isSeedProtected = false;
     private EditText bip39Passphrase;
     private Button skipButton;
-
+    private boolean showIcon;    private boolean validateWallet;
+    private VerifySeedTask verifySeedTask;   private final Handler handler = new MyHandler(this);
+    public interface Listener {
+        void onSeedVerified(Bundle bundle);
+    }
     public static RestoreFragment newInstance() {
         return newInstance(null);
     }
-
+    public static RestoreFragment newInstanceForResettingEncryption() {
+        RestoreFragment f = newInstance(null);
+        Bundle args = new Bundle();
+        args.putBoolean("validate_wallet", true);
+        args.putBoolean("show_icon", false);
+        f.setArguments(args);
+        return f;
+    }
     public static RestoreFragment newInstance(@Nullable String seed) {
         RestoreFragment fragment = new RestoreFragment();
         if (seed != null) {
-            Bundle args = new Bundle();
+            Bundle args = new Bundle();args.putBoolean("show_icon", true);
             args.putString(Constants.ARG_SEED, seed);
             fragment.setArguments(args);
         }
@@ -72,9 +93,12 @@ public class RestoreFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (getArguments() != null) {
+        if (getArguments() != null) {this.validateWallet = getArguments().getBoolean("validate_wallet", false);
+            if (this.validateWallet) {
+                Preconditions.checkState(this.app.getWallet() != null, "Asked to validate a null wallet");
+            }
             seed = getArguments().getString(Constants.ARG_SEED);
-            isNewSeed = seed != null;
+            isNewSeed = seed != null;this.showIcon = getArguments().getBoolean("show_icon", false);
         }
     }
 
@@ -83,9 +107,11 @@ public class RestoreFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_restore, container, false);
-
+        if (this.showIcon) {
         Fonts.setTypeface(view.findViewById(R.id.coins_icon), Fonts.Font.COINOMI_FONT_ICONS);
-
+        } else {
+            UiUtils.setGone(ButterKnife.findById(view, (int) R.id.coins_icon));
+        }
         ImageButton scanQrButton = (ImageButton) view.findViewById(R.id.scan_qr_code);
         scanQrButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -160,7 +186,7 @@ public class RestoreFragment extends Fragment {
     public void onAttach(final Context context) {
         super.onAttach(context);
         try {
-            listener = (WelcomeFragment.Listener) context;
+            listener = (WelcomeFragment.Listener) context; this.app = (WalletApplication) context.getApplicationContext();
         } catch (ClassCastException e) {
             throw new ClassCastException(context.toString()
                     + " must implement " + WelcomeFragment.Listener.class);
@@ -196,7 +222,18 @@ public class RestoreFragment extends Fragment {
 
     private void verifyMnemonicAndProceed() {
         Keyboard.hideKeyboard(getActivity());
-        if (verifyMnemonic()) {
+        if (!verifyMnemonic()) {
+            return;
+        }
+        if (!this.validateWallet) {
+            finallyNotifyListener();
+        } else if (this.verifySeedTask == null) {
+            this.verifySeedTask = new VerifySeedTask(this.handler, this.app.getWallet(), this.mnemonicTextView.getText().toString(), this.bip39Passphrase.getText().toString());
+            this.verifySeedTask.execute(new Void[0]);
+        }
+    }
+
+    private void finallyNotifyListener() {
             Bundle args = getArguments();
             if (args == null) args = new Bundle();
 
@@ -207,7 +244,7 @@ public class RestoreFragment extends Fragment {
             args.putString(Constants.ARG_SEED, mnemonicTextView.getText().toString().trim());
             if (listener != null) listener.onSeedVerified(args);
         }
-    }
+
 
     private boolean verifyMnemonic() {
         log.info("Verifying seed");
@@ -216,7 +253,7 @@ public class RestoreFragment extends Fragment {
         boolean isSeedValid = false;
         try {
             MnemonicCode.INSTANCE.check(seedWords);
-            clearError(errorMnemonicΜessage);
+            UiUtils.setGone(this.errorMnemonicΜessage);
             isSeedValid = true;
         } catch (MnemonicException.MnemonicChecksumException e) {
             log.info("Checksum error in seed: {}", e.getMessage());
@@ -293,7 +330,7 @@ public class RestoreFragment extends Fragment {
     }
 
     private void setError(TextView errorView, int messageId, Object... formatArgs) {
-        setError(errorView, getResources().getString(messageId, formatArgs));
+        UiUtils.setTextAndVisible(errorView, getResources().getString(messageId, formatArgs));
     }
 
     private void setError(TextView errorView, String message) {
@@ -322,7 +359,37 @@ public class RestoreFragment extends Fragment {
             }
         }
     }
+    static class VerifySeedTask extends AsyncTask<Void, Void, Boolean> {
+        Handler handler;
+        private final String seed;
+        private final String seedPassword;
+        private final Wallet wallet;
 
+        VerifySeedTask(Handler handler, Wallet wallet, String seed, String seedPassword) {
+            this.handler = handler;
+            this.wallet = wallet;
+            this.seed = seed;
+            this.seedPassword = seedPassword;
+        }
+
+        protected void onPreExecute() {
+            this.handler.sendEmptyMessage(0);
+        }
+
+        protected Boolean doInBackground(Void... params) {
+            ArrayList<String> seedWords = new ArrayList();
+            for (String word : this.seed.trim().split(" ")) {
+                if (!word.isEmpty()) {
+                    seedWords.add(word);
+                }
+            }
+            return this.wallet.isOwnSeed(seedWords, this.seedPassword);
+        }
+
+        protected void onPostExecute(Boolean isOwnSeed) {
+            this.handler.sendMessage(this.handler.obtainMessage(1, isOwnSeed));
+        }
+    }
     private abstract static class SpaceTokenizer implements MultiAutoCompleteTextView.Tokenizer {
         public int findTokenStart(CharSequence text, int cursor) {
             int i = cursor;
@@ -355,5 +422,35 @@ public class RestoreFragment extends Fragment {
         }
 
         abstract public void onToken();
+    }   public void onPasswordTaskStarted() {
+        Dialogs.ProgressDialogFragment.show(getFragmentManager(), getString(R.string.restore_verifying_seed), "seed_verification_dialog_tag");
+    }
+
+    public void onPasswordTaskFinished(boolean isOwnSeed) {
+        if (!Dialogs.dismissAllowingStateLoss(getFragmentManager(), "seed_verification_dialog_tag")) {
+            this.verifySeedTask = null;
+            if (isOwnSeed) {
+                finallyNotifyListener();
+            } else {
+                setError(this.errorMnemonicΜessage, R.string.restore_error_wrong_seed, new Object[0]);
+            }
+        }
+    }   private static class MyHandler extends WeakHandler<RestoreFragment> {
+        public MyHandler(RestoreFragment ref) {
+            super(ref);
+        }
+
+        protected void weakHandleMessage(RestoreFragment ref, Message msg) {
+            switch (msg.what) {
+                case 0:
+                    ref.onPasswordTaskStarted();
+                    return;
+                case 1:
+                    ref.onPasswordTaskFinished(((Boolean) msg.obj).booleanValue());
+                    return;
+                default:
+                    return;
+            }
+        }
     }
 }

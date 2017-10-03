@@ -36,6 +36,7 @@ import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.FiatType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.ValueType;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.exceptions.NoSuchPocketException;
@@ -60,13 +61,14 @@ import com.coinomi.wallet.ui.widget.AddressView;
 import com.coinomi.wallet.ui.widget.AmountEditView;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.UiUtils;
+import com.coinomi.wallet.util.WalletUtils;
 import com.coinomi.wallet.util.WeakHandler;
 import com.google.common.base.Charsets;
 
 import org.acra.ACRA;
 import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.Wallet;
+import org.bitcoinj.wallet.Wallet;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.utils.Threading;
 import org.slf4j.Logger;
@@ -80,9 +82,10 @@ import java.util.Timer;
 
 import javax.annotation.Nullable;
 
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
+import butterknife.Unbinder;
 
 import static android.view.View.GONE;
 import static android.view.View.OnClickListener;
@@ -136,7 +139,7 @@ public class SendFragment extends WalletFragment {
     private boolean isTxMessageAdded;
     private boolean isTxMessageValid;
     private WalletAccount account;
-
+    private Unbinder unbinder;
     private MyHandler handler = new MyHandler(this);
     private ContentObserver addressBookObserver = new AddressBookObserver(handler);
     private WalletApplication application;
@@ -144,20 +147,20 @@ public class SendFragment extends WalletFragment {
     private Map<String, ExchangeRate> localRates = new HashMap<>();
     private ShapeShiftMarketInfo marketInfo;
 
-    @Bind(R.id.send_to_address)         AutoCompleteTextView sendToAddressView;
-    @Bind(R.id.send_to_address_static)  AddressView sendToStaticAddressView;
-    @Bind(R.id.send_coin_amount)        AmountEditView sendCoinAmountView;
-    @Bind(R.id.send_local_amount)       AmountEditView sendLocalAmountView;
-    @Bind(R.id.address_error_message)   TextView addressError;
-    @Bind(R.id.amount_error_message)    TextView amountError;
-    @Bind(R.id.amount_warning_message)  TextView amountWarning;
-    @Bind(R.id.scan_qr_code)            ImageButton scanQrCodeButton;
-    @Bind(R.id.erase_address)           ImageButton eraseAddressButton;
-    @Bind(R.id.tx_message_add_remove)   Button txMessageButton;
-    @Bind(R.id.tx_message_label)        TextView txMessageLabel;
-    @Bind(R.id.tx_message)              EditText txMessageView;
-    @Bind(R.id.tx_message_counter)      TextView txMessageCounter;
-    @Bind(R.id.send_confirm)            Button sendConfirmButton;
+    @BindView(R.id.send_to_address)         AutoCompleteTextView sendToAddressView;
+    @BindView(R.id.send_to_address_static)  AddressView sendToStaticAddressView;
+    @BindView(R.id.send_coin_amount)        AmountEditView sendCoinAmountView;
+    @BindView(R.id.send_local_amount)       AmountEditView sendLocalAmountView;
+    @BindView(R.id.address_error_message)   TextView addressError;
+    @BindView(R.id.amount_error_message)    TextView amountError;
+    @BindView(R.id.amount_warning_message)  TextView amountWarning;
+    @BindView(R.id.scan_qr_code)            ImageButton scanQrCodeButton;
+    @BindView(R.id.erase_address)           ImageButton eraseAddressButton;
+    @BindView(R.id.tx_message_add_remove)   Button txMessageButton;
+    @BindView(R.id.tx_message_label)        TextView txMessageLabel;
+    @BindView(R.id.tx_message)              EditText txMessageView;
+    @BindView(R.id.tx_message_counter)      TextView txMessageCounter;
+    @BindView(R.id.send_confirm)            Button sendConfirmButton;
     @Nullable ReceivingAddressViewAdapter sendToAdapter;
     CurrencyCalculatorLink amountCalculatorLink;
     Timer timer;
@@ -195,6 +198,10 @@ public class SendFragment extends WalletFragment {
         args.putString(Constants.ARG_URI, uri.toString());
         fragment.setArguments(args);
         return fragment;
+    }
+    @OnClick({2131689747})
+    public void onEmptyWalletClick() {
+        setAmountForEmptyWallet();
     }
 
     public SendFragment() {
@@ -303,7 +310,7 @@ public class SendFragment extends WalletFragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_send, container, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         sendToAdapter = new ReceivingAddressViewAdapter(inflater.getContext());
         sendToAddressView.setAdapter(sendToAdapter);
@@ -331,7 +338,7 @@ public class SendFragment extends WalletFragment {
         config.setLastExchangeDirection(amountCalculatorLink.getExchangeDirection());
         amountCalculatorLink = null;
         sendToAdapter = null;
-        ButterKnife.unbind(this);
+        unbinder.unbind();
         super.onDestroyView();
     }
 
@@ -651,13 +658,23 @@ public class SendFragment extends WalletFragment {
                         log.error("An unknown error occurred while sending coins", error);
                         String errorMessage = getString(R.string.send_coins_error, error.getMessage());
                         Toast.makeText(getActivity(), errorMessage, Toast.LENGTH_LONG).show();
-                    }
+                    }            showError(error);
                     if (listener != null) listener.onTransactionBroadcastFailure(account, null);
                 }
             }
         }
     }
-
+    private void showError(Throwable error) {
+        String errorMessage = WalletUtils.getErrorMessage(getContext(), error);
+        if (errorMessage == null) {
+            if (ACRA.isInitialised()) {
+                ACRA.getErrorReporter().handleSilentException(error);
+            }
+            log.error("An unknown error occurred while sending coins", error);
+            errorMessage = getString(R.string.send_coins_error, error.getMessage());
+        }
+        Toast.makeText(getActivity(), errorMessage, Toast.LENGTH_LONG).show();
+    }
     private boolean processInput(String input) {
         input = input.trim();
         try {
@@ -917,7 +934,7 @@ public class SendFragment extends WalletFragment {
     }
 
     private void validateAddress(boolean isTyping) {
-        if (address == null) {
+        if (!isRemoving() && this.address == null && this.sendToAddressView != null) {
             String input = sendToAddressView.getText().toString().trim();
 
             try {
@@ -929,7 +946,12 @@ public class SendFragment extends WalletFragment {
                         updateView();
                         addressError.setVisibility(View.GONE);
                         return;
-                    }
+                    }else if (this.account.getCoinType() instanceof EthFamily) {
+                        if (!processInput(input)) {
+                            updateView();
+                            this.addressError.setVisibility(8);
+                            return;
+                        }}
                     // Process fast the input string
                     if (processInput(input)) return;
 

@@ -14,12 +14,12 @@ import com.coinomi.core.exchange.shapeshift.data.ShapeShiftRate;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftTime;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftTxStatus;
 import com.coinomi.core.wallet.AbstractAddress;
-import com.squareup.okhttp.MediaType;
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.Response;
-
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Request.Builder;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;

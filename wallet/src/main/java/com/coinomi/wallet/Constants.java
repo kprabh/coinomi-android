@@ -216,9 +216,9 @@ public class Constants {
             new CoinAddress(RichcoinMain.get(),     new ServerAddress("richx-cce-1.coinomi.net", 5046),
                                                     new ServerAddress("richx-cce-2.coinomi.net", 5046)),
             new CoinAddress(IxcoinMain.get(),       new ServerAddress("ixc-cce-1.coinomi.net", 5047),
-                                                    new ServerAddress("ixc-cce-2.coinomi.net", 5047))
+                                                    new ServerAddress("ixc-cce-2.coinomi.net", 5047)),
             new CoinAddress(VoxelsMain.get(),       new ServerAddress("voxels-1.crypto-expert.com", 5048),
-                                                    new ServerAddress("voxels-2.crypto-expert.com", 5048))
+                                                    new ServerAddress("voxels-2.crypto-expert.com", 5048)),
             new CoinAddress(SilkcoinMain.get(),     new ServerAddress("silkcoin-1.crypto-expert.com", 5049),
                                                     new ServerAddress("silkcoin-2.crypto-expert.com", 5049))
 
@@ -369,6 +369,6 @@ public class Constants {
             LitecoinTest.get(),
             DogecoinTest.get(),
 	    VoxelsMain.get(),
-	    SilkcoinMain.get(),
+	    SilkcoinMain.get()
     );
 }

@@ -33,7 +33,6 @@ import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.util.Fonts;
-import com.coinomi.wallet.util.WalletUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;

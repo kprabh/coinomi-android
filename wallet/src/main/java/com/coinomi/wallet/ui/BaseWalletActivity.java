@@ -1,5 +1,6 @@
 package com.coinomi.wallet.ui;
 
+import android.os.Build.VERSION;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
@@ -85,5 +86,9 @@ abstract public class BaseWalletActivity extends AppCompatActivity {
     protected void onStop() {
         super.onStop();
         getWalletApplication().touchLastStop();
+    }
+
+    public boolean isChangingConfigurations() {
+        return VERSION.SDK_INT >= 11 && super.isChangingConfigurations();
     }
 }

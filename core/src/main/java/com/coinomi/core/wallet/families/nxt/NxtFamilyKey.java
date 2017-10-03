@@ -1,6 +1,7 @@
 package com.coinomi.core.wallet.families.nxt;
 
 import com.coinomi.core.coins.nxt.Crypto;
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.protos.Protos;
 import com.coinomi.core.util.KeyUtils;
 import com.google.protobuf.ByteString;
@@ -12,10 +13,11 @@ import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.utils.Threading;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.wallet.EncryptableKeyChain;
 import org.bitcoinj.wallet.KeyBag;
-import org.bitcoinj.wallet.KeyChainEventListener;
+import org.bitcoinj.wallet.listeners.KeyChainEventListener;
 import org.bitcoinj.wallet.RedeemData;
 import org.spongycastle.crypto.params.KeyParameter;
 
@@ -24,6 +26,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nullable;
 
@@ -36,9 +39,10 @@ import static com.google.common.collect.Lists.newLinkedList;
  * @author John L. Jegutanis
  */
 final public class NxtFamilyKey implements EncryptableKeyChain, KeyBag, Serializable {
-    private final DeterministicKey entropy;
+    private  DeterministicKey entropy;
     private final byte[] publicKey;
-
+    //private DeterministicKey rootKey;
+    private final ReentrantLock lock = Threading.lock("NxtKeyChain");
     public NxtFamilyKey(DeterministicKey entropy, @Nullable KeyCrypter keyCrypter,
                         @Nullable KeyParameter key) {
         checkArgument(!entropy.isEncrypted(), "Entropy must not be encrypted");
@@ -253,7 +257,30 @@ final public class NxtFamilyKey implements EncryptableKeyChain, KeyBag, Serializ
     public KeyCrypter getKeyCrypter() {
         return entropy.getKeyCrypter();
     }
+    public int getAccountIndex() {
+        return this.entropy.getChildNumber().num();
+    }
 
+    public boolean hasPrivKey() {
+        return this.entropy.hasPrivKey();
+    }
+
+    public DeterministicKey getRootKey() {
+        return this.entropy;
+    }
+
+    public void resetRootKey(DeterministicKey key) throws ResetKeyException {
+        this.lock.lock();
+        try {
+            if (Arrays.equals(this.entropy.getPubKey(), key.getPubKey())) {
+                this.entropy = key;
+                return;
+            }
+            throw new ResetKeyException("Provided key does not match the current root key");
+        } finally {
+            this.lock.unlock();
+        }
+    }
     @Override
     public int numKeys() {
         return 1;

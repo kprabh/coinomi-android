@@ -9,9 +9,12 @@ import com.coinomi.core.wallet.AbstractAddress;
 import com.google.common.base.Charsets;
 
 import org.bitcoinj.core.Coin;
+import org.bitcoinj.core.Context;
 import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.HDUtils;
+import org.bitcoinj.params.AbstractBitcoinNetParams;
 
 import java.io.Serializable;
 import java.math.BigInteger;
@@ -24,7 +27,87 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * @author John L. Jegutanis
  */
-abstract public class CoinType extends NetworkParameters implements ValueType, Serializable {
+abstract public class CoinType extends AbstractBitcoinNetParams implements ValueType, Serializable {
+
+    protected String[] altSymbols;
+    protected boolean hasDynamicFees;
+    protected boolean hasSelectableFees;
+    protected Value minFeeValue;
+    private transient Value zeroCoin;
+
+    public static class DummyNetParams extends AbstractBitcoinNetParams {
+        private static DummyNetParams instance = new DummyNetParams();
+
+        public static synchronized DummyNetParams get() {
+            DummyNetParams dummyNetParams;
+            synchronized (DummyNetParams.class) {
+                dummyNetParams = instance;
+            }
+            return dummyNetParams;
+        }
+
+        public String getPaymentProtocolId() {
+            return null;
+        }
+    }
+
+    static {
+        Context.getOrCreate(DummyNetParams.get());
+    }
+
+    public CoinType() {
+        this.altSymbols = new String[0];
+        this.hasDynamicFees = false;
+        this.hasSelectableFees = false;
+        this.feePolicy = FeePolicy.FEE_PER_KB;
+        this.bip32HeaderPub = 76067358;
+        this.bip32HeaderPriv = 76066276;
+    }
+
+    public Value getMinFeeValue() {
+        if (this.minFeeValue != null) {
+            return this.minFeeValue;
+        }
+        return this.feeValue;
+    }
+
+    public Value zeroCoin() {
+        if (this.zeroCoin == null) {
+            this.zeroCoin = Value.valueOf((ValueType) this, 0);
+        }
+        return this.zeroCoin;
+    }
+
+    public Value value(byte[] units) {
+        return Value.valueOf(this, units);
+    }
+
+    public Value value(BigInteger units) {
+        return Value.valueOf((ValueType) this, units);
+    }
+
+    public Value value(double value) {
+        return Value.parse(this, value);
+    }
+
+    public boolean hasMaxMoney() {
+        return false;
+    }
+
+    public Sha256Hash parseTxId(String str) {
+        return new Sha256Hash(str.replace("0x", ""));
+    }
+
+
+    public boolean hasDynamicFees() {
+        return this.hasDynamicFees;
+    }
+
+    public boolean hasSelectableFees() {
+        return this.hasSelectableFees;
+    }
+
+    //TODO
     private static final long serialVersionUID = 1L;
 
     private static final String BIP_44_KEY_PATH = "44H/%dH/%dH";
@@ -153,10 +236,11 @@ abstract public class CoinType extends NetworkParameters implements ValueType, S
     public Value oneCoin() {
         if (oneCoin == null) {
             BigInteger units = BigInteger.TEN.pow(getUnitExponent());
-            oneCoin = Value.valueOf(this, units.longValue());
+            oneCoin = Value.valueOf(this, units);
         }
         return oneCoin;
     }
+
 
     @Override
     public Value value(String string) {
@@ -188,11 +272,11 @@ abstract public class CoinType extends NetworkParameters implements ValueType, S
     }
 
     @Override
-    public MonetaryFormat getMonetaryFormat() {
+    public MonetaryFormat getMoneyFormat() {
         if (friendlyFormat == null) {
             friendlyFormat = new MonetaryFormat()
                     .shift(0).minDecimals(2).code(0, symbol).postfixCode();
-            switch (unitExponent) {
+            /*switch (unitExponent) {
                 case 8:
                     friendlyFormat = friendlyFormat.optionalDecimals(2, 2, 2);
                     break;
@@ -204,6 +288,11 @@ abstract public class CoinType extends NetworkParameters implements ValueType, S
                     break;
                 default:
                     friendlyFormat = friendlyFormat.minDecimals(unitExponent);
+            }*/
+            if (this.unitExponent.intValue() <= 2 || this.unitExponent.intValue() % 2 != 0) {
+                this.friendlyFormat = this.friendlyFormat.minDecimals(this.unitExponent.intValue());
+            } else {
+                this.friendlyFormat = this.friendlyFormat.repeatOptionalDecimals(2, (this.unitExponent.intValue() / 2) - 1);
             }
         }
         return friendlyFormat;

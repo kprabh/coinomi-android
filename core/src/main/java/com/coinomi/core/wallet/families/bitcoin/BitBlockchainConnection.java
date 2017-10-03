@@ -6,6 +6,6 @@ import com.coinomi.core.network.interfaces.BlockchainConnection;
 /**
  * @author John L. Jegutanis
  */
-public interface BitBlockchainConnection extends BlockchainConnection<BitTransaction> {
+public interface BitBlockchainConnection extends BlockchainConnection<BitTransaction> {void estimateFee(int i, TxFeeEventListener txFeeEventListener);
     void getUnspentTx(AddressStatus status, BitTransactionEventListener listener);
 }

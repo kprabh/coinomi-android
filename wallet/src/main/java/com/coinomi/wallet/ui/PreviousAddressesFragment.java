@@ -16,7 +16,7 @@ import android.widget.Toast;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.wallet.AbstractAddress;
-import com.coinomi.core.wallet.WalletPocketHD;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;

@@ -17,21 +17,27 @@ import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.coinomi.core.coins.BitcoinMain;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.FiatType;
+import com.coinomi.core.coins.SyscoinMain;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.families.BitFamily;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
+import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.uri.CoinURI;
 import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.bitcoin.BitAddress;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.Constants;
@@ -50,9 +56,9 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.Unbinder;
 import butterknife.OnClick;
 
 import static com.coinomi.core.Preconditions.checkNotNull;
@@ -82,19 +88,20 @@ public class AddressRequestFragment extends WalletFragment {
     private WalletAccount account;
     private String message;
 
-    @Bind(R.id.request_address_label) TextView addressLabelView;
-    @Bind(R.id.request_address) TextView addressView;
-    @Bind(R.id.request_coin_amount) AmountEditView sendCoinAmountView;
-    @Bind(R.id.view_previous_addresses) View previousAddressesLink;
-    @Bind(R.id.qr_code) ImageView qrView;
+    @BindView(R.id.request_address_label) TextView addressLabelView;
+    @BindView(R.id.request_address) TextView addressView;
+    @BindView(R.id.request_coin_amount) AmountEditView sendCoinAmountView;
+    @BindView(R.id.view_previous_addresses) View previousAddressesLink;
+    @BindView(R.id.qr_code) ImageView qrView;
     String lastQrContent;
     CurrencyCalculatorLink amountCalculatorLink;
     ContentResolver resolver;
-
+    @BindView(2131689722)
+    Button convertButtonView;
     private final MyHandler handler = new MyHandler(this);
     private final ContentObserver addressBookObserver = new AddressBookObserver(handler);
     private Configuration config;
-
+    Unbinder unbinder;
     private static class MyHandler extends WeakHandler<AddressRequestFragment> {
         public MyHandler(AddressRequestFragment ref) { super(ref); }
 
@@ -178,7 +185,7 @@ public class AddressRequestFragment extends WalletFragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_request, container, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         sendCoinAmountView.resetType(type, true);
 
@@ -202,7 +209,7 @@ public class AddressRequestFragment extends WalletFragment {
     public void onDestroyView() {
         amountCalculatorLink = null;
         lastQrContent = null;
-        ButterKnife.unbind(this);
+        unbinder.unbind();
         super.onDestroyView();
     }
 
@@ -217,6 +224,32 @@ public class AddressRequestFragment extends WalletFragment {
         // Hack to dismiss this action mode when back is pressed
         if (activity != null && activity instanceof WalletActivity) {
             ((WalletActivity) activity).registerActionMode(actionMode);
+        }
+    }
+    @OnClick({2131689722})
+    public void onConvertClick() {
+        try {
+            AbstractAddress newAddress;
+            if (this.receiveAddress.getType().equals(SyscoinMain.get())) {
+                newAddress = BitAddress.from(BitcoinMain.get(), BitAddress.from(this.receiveAddress).getHash160());
+            } else {
+                newAddress = BitAddress.from(SyscoinMain.get(), BitAddress.from(this.receiveAddress).getHash160());
+            }
+            this.label = resolveLabel(newAddress);
+            if (this.label != null) {
+                this.addressLabelView.setText(this.label);
+                this.addressLabelView.setTypeface(Typeface.DEFAULT);
+                this.addressView.setText(GenericUtils.addressSplitToGroups(newAddress));
+                this.addressView.setVisibility(View.VISIBLE);
+            } else {
+                this.addressLabelView.setText(GenericUtils.addressSplitToGroupsMultiline(newAddress));
+                this.addressLabelView.setTypeface(Typeface.MONOSPACE);
+                this.addressView.setVisibility(View.GONE);
+            }
+            this.receiveAddress = newAddress;
+            updateQrCode(getUri());
+        } catch (AddressMalformedException e) {
+            Toast.makeText(getActivity(), R.string.cannot_convert_to_btc_address, Toast.LENGTH_LONG).show();
         }
     }
 

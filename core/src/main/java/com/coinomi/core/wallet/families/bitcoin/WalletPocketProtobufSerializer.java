@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
@@ -23,12 +23,9 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.network.AddressStatus;
 import com.coinomi.core.protos.Protos;
-import com.coinomi.core.wallet.families.bitcoin.BitTransaction;
-import com.coinomi.core.wallet.families.bitcoin.BitWalletTransaction;
-import com.coinomi.core.wallet.families.bitcoin.EmptyTransactionOutput;
-import com.coinomi.core.wallet.families.bitcoin.TrimmedTransaction;
-import com.coinomi.core.wallet.families.bitcoin.TrimmedOutput;
-import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
+import com.coinomi.core.wallet.AbstractAddress;
+import com.coinomi.core.wallet.SimpleHDKeyChain;
+import com.coinomi.core.wallet.WalletTransaction;
 import com.google.protobuf.ByteString;
 
 import org.bitcoinj.core.Coin;
@@ -41,17 +38,15 @@ import org.bitcoinj.core.TransactionInput;
 import org.bitcoinj.core.TransactionOutPoint;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.crypto.KeyCrypter;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.ListIterator;
 import java.util.Map;
 
 import javax.annotation.Nullable;
@@ -241,9 +236,9 @@ public class WalletPocketProtobufSerializer {
 
         if (bitTx.isTrimmed()) {
             txBuilder.setIsTrimmed(true);
-            txBuilder.setValueReceived(bitTx.getValueReceived().value);
-            txBuilder.setValueSent(bitTx.getValueSent().value);
-            if (bitTx.getFee() != null) txBuilder.setFee(bitTx.getFee().value);
+            txBuilder.setValueReceived(bitTx.getValueReceived().getBigInt().longValue());
+            txBuilder.setValueSent(bitTx.getValueSent().getBigInt().longValue());
+            if (bitTx.getFee() != null) txBuilder.setFee(bitTx.getFee().getBigInt().longValue());
         }
 
         return txBuilder.build();
@@ -289,14 +284,8 @@ public class WalletPocketProtobufSerializer {
             }
         }
 
-        for (ListIterator<PeerAddress> it = confidence.getBroadcastBy(); it.hasNext();) {
-            PeerAddress address = it.next();
-            Protos.PeerAddress proto = Protos.PeerAddress.newBuilder()
-                    .setIpAddress(ByteString.copyFrom(address.getAddr().getAddress()))
-                    .setPort(address.getPort())
-                    .setServices(address.getServices().longValue())
-                    .build();
-            confidenceBuilder.addBroadcastBy(proto);
+        for (PeerAddress address : confidence.getBroadcastBy()) {
+            confidenceBuilder.addBroadcastBy(Protos.PeerAddress.newBuilder().setIpAddress(ByteString.copyFrom(address.getAddr().getAddress())).setPort(address.getPort()).build());
         }
         txBuilder.setConfidence(confidenceBuilder);
     }
@@ -356,7 +345,7 @@ public class WalletPocketProtobufSerializer {
             // Update transaction outputs to point to inputs that spend them
             ArrayList<WalletTransaction<BitTransaction>> wtxs = new ArrayList<>(walletProto.getTransactionList().size());
             for (Protos.Transaction txProto : walletProto.getTransactionList()) {
-                wtxs.add(connectTransactionOutputs(txProto));
+                wtxs.add(connectTransactionOutputs(coinType, txProto));
             }
 
             pocket.restoreWalletTransactions(wtxs);
@@ -497,7 +486,7 @@ public class WalletPocketProtobufSerializer {
             final Value valueReceived = type.value(txProto.getValueReceived());
             final Value fee = txProto.hasFee() ? type.value(txProto.getFee()) : null;
             bitTx = BitTransaction.fromTrimmed(byteStringToHash(txProto.getHash()), tx, valueSent,
-                    valueReceived, fee);
+                    valueReceived, fee, true);
         } else {
             bitTx = new BitTransaction(tx);
         }
@@ -520,7 +509,7 @@ public class WalletPocketProtobufSerializer {
         return new TransactionOutPoint(type, index & 0xFFFFFFFFL, byteStringToHash(hash));
     }
 
-    private BitWalletTransaction connectTransactionOutputs(Protos.Transaction txProto) throws UnreadableWalletException {
+    private BitWalletTransaction connectTransactionOutputs(CoinType type, Protos.Transaction txProto) throws UnreadableWalletException {
         BitTransaction tx = txMap.get(txProto.getHash());
         final WalletTransaction.Pool pool;
         switch (txProto.getPool()) {
@@ -543,7 +532,7 @@ public class WalletPocketProtobufSerializer {
             } else {
                 if (transactionOutput.hasSpentByTransactionHash()) {
                     final ByteString spentByTransactionHash = transactionOutput.getSpentByTransactionHash();
-                    BitTransaction spendingTx = txMap.get(spentByTransactionHash);
+                    BitTransaction spendingTx = txMap.get(transactionOutput.getSpentByTransactionHash());
                     if (spendingTx == null || spendingTx.isTrimmed()) {
                         throw new UnreadableWalletException(String.format("Could not connect %s to %s",
                                 tx.getHashAsString(), byteStringToHash(spentByTransactionHash)));
@@ -559,13 +548,13 @@ public class WalletPocketProtobufSerializer {
             Protos.TransactionConfidence confidenceProto = txProto.getConfidence();
             Transaction rawTx = tx.getRawTransaction();
             TransactionConfidence confidence = rawTx.getConfidence();
-            readConfidence(rawTx, confidenceProto, confidence);
+            readConfidence(type, rawTx, confidenceProto, confidence);
         }
 
         return new BitWalletTransaction(pool, tx);
     }
 
-    private void readConfidence(Transaction tx, Protos.TransactionConfidence confidenceProto,
+    private void readConfidence(CoinType type, Transaction tx, Protos.TransactionConfidence confidenceProto,
                                 TransactionConfidence confidence) throws UnreadableWalletException {
         // We are lenient here because tx confidence is not an essential part of the wallet.
         // If the tx has an unknown type of confidence, ignore.
@@ -613,16 +602,11 @@ public class WalletPocketProtobufSerializer {
 //            confidence.setOverridingTransaction(overridingTransaction);
 //        }
         for (Protos.PeerAddress proto : confidenceProto.getBroadcastByList()) {
-            InetAddress ip;
             try {
-                ip = InetAddress.getByAddress(proto.getIpAddress().toByteArray());
+                confidence.markBroadcastBy(new PeerAddress(type, InetAddress.getByAddress(proto.getIpAddress().toByteArray()), proto.getPort()));
             } catch (UnknownHostException e) {
                 throw new UnreadableWalletException("Peer IP address does not have the right length", e);
             }
-            int port = proto.getPort();
-            PeerAddress address = new PeerAddress(ip, port);
-            address.setServices(BigInteger.valueOf(proto.getServices()));
-            confidence.markBroadcastBy(address);
         }
         switch (confidenceProto.getSource()) {
             case SOURCE_SELF: confidence.setSource(TransactionConfidence.Source.SELF); break;

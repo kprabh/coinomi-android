@@ -3,16 +3,20 @@ package com.coinomi.core.util;
 
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.EthClassicMain;
+import com.coinomi.core.coins.EthereumMain;
+import com.coinomi.core.coins.ExpanseMain;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.ValueType;
 import com.coinomi.core.exceptions.AddressMalformedException;
+import com.coinomi.core.util.MonetaryFormat.Monetary;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.families.bitcoin.BitAddress;
+import com.coinomi.core.wallet.families.eth.EthAddress;
 import com.coinomi.core.wallet.families.nxt.NxtAddress;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.AddressFormatException;
-import org.bitcoinj.core.Monetary;
 import org.bitcoinj.core.VersionedChecksummedBytes;
 
 import java.util.List;
@@ -44,6 +48,8 @@ public class GenericUtils {
             return addressSplitToGroupsMultiline((NxtAddress) address);
         } else if (address instanceof BitAddress) {
             return addressSplitToGroupsMultiline((BitAddress) address);
+        } else if (address instanceof EthAddress) {
+            return addressSplitToGroupsMultiline((EthAddress) address);
         } else {
             throw new RuntimeException("Unsupported address: " + address.getClass());
         }
@@ -53,7 +59,30 @@ public class GenericUtils {
         // Nxt addresses are short, so no need to split them in multiple lines
         return addressSplitToGroups(address);
     }
-
+    public static String addressSplitToGroupsMultiline(EthAddress address) {
+        String addressStr = address.toString();
+        StringBuilder sb = new StringBuilder();
+        sb.append(addressStr.substring(0, 4));
+        sb.append(" ");
+        sb.append(addressStr.substring(4, 8));
+        sb.append(" ");
+        sb.append(addressStr.substring(8, 12));
+        sb.append(" ");
+        sb.append(addressStr.substring(12, 16));
+        sb.append(" ");
+        sb.append(addressStr.substring(16, 21));
+        sb.append("\n");
+        sb.append(addressStr.substring(21, 25));
+        sb.append(" ");
+        sb.append(addressStr.substring(25, 29));
+        sb.append(" ");
+        sb.append(addressStr.substring(29, 33));
+        sb.append(" ");
+        sb.append(addressStr.substring(33, 37));
+        sb.append(" ");
+        sb.append(addressStr.substring(37));
+        return sb.toString();
+    }
     public static String addressSplitToGroupsMultiline(final BitAddress address) {
         String addressStr = address.toString();
         StringBuilder sb = new StringBuilder();
@@ -81,6 +110,8 @@ public class GenericUtils {
             return addressSplitToGroups((NxtAddress) address);
         } else if (address instanceof BitAddress) {
             return addressSplitToGroups((BitAddress) address);
+        } else if (address instanceof EthAddress) {
+            return addressSplitToGroups((EthAddress) address);
         } else {
             throw new RuntimeException("Unsupported address: " + address.getClass());
         }
@@ -89,7 +120,30 @@ public class GenericUtils {
     public static String addressSplitToGroups(final NxtAddress address) {
         return address.toString(); // already split in groups
     }
-
+    public static String addressSplitToGroups(EthAddress address) {
+        String addressStr = address.toString();
+        StringBuilder sb = new StringBuilder();
+        sb.append(addressStr.substring(0, 5));
+        sb.append(" ");
+        sb.append(addressStr.substring(5, 9));
+        sb.append(" ");
+        sb.append(addressStr.substring(9, 13));
+        sb.append(" ");
+        sb.append(addressStr.substring(13, 17));
+        sb.append(" ");
+        sb.append(addressStr.substring(17, 21));
+        sb.append(" ");
+        sb.append(addressStr.substring(21, 25));
+        sb.append(" ");
+        sb.append(addressStr.substring(25, 29));
+        sb.append(" ");
+        sb.append(addressStr.substring(29, 33));
+        sb.append(" ");
+        sb.append(addressStr.substring(33, 37));
+        sb.append(" ");
+        sb.append(addressStr.substring(37));
+        return sb.toString();
+    }
     public static String addressSplitToGroups(final BitAddress address) {
         String addressStr = address.toString();
         StringBuilder sb = new StringBuilder();
@@ -113,7 +167,7 @@ public class GenericUtils {
     }
 
     public static String formatValue(@Nonnull final Value value) {
-        return formatCoinValue(value.type, value.toCoin(), "", "-", 8, 0);
+        return formatCoinValue(value.type, value, "", "-", 8, 0);
     }
 
     public static String formatCoinValue(@Nonnull final ValueType type, @Nonnull final Monetary value) {
@@ -130,6 +184,15 @@ public class GenericUtils {
                                          final int precision, final int shift) {
         return formatValue(type.getUnitExponent(), value, plusSign, minusSign, precision, shift, false);
     }
+    @Deprecated
+    public static String formatValue(MonetaryFormat monetaryFormat, Monetary value, boolean removeFinalZeroes) {
+        return formatValue(monetaryFormat.removeFinalZeroes(removeFinalZeroes), value);
+    }
+
+    @Deprecated
+    public static String formatValue(MonetaryFormat monetaryFormat, Monetary value) {
+        return monetaryFormat.noCode().format(value).toString();
+    }
 
     public static String formatCoinValue(@Nonnull final ValueType type, @Nonnull final Monetary value,
                                          boolean removeFinalZeroes) {
@@ -139,7 +202,7 @@ public class GenericUtils {
     private static String formatValue(final long unitExponent, @Nonnull final Monetary value,
                                       @Nonnull final String plusSign, @Nonnull final String minusSign,
                                       final int precision, final int shift, boolean removeFinalZeroes) {
-        long longValue = value.getValue();
+        long longValue = value.getBigInt().longValue();
 
         final String sign = value.signum() == -1 ? minusSign : plusSign;
 
@@ -183,7 +246,7 @@ public class GenericUtils {
         }
 
         // Relax precision if incorrectly shows value as 0.00 but is in reality not zero
-        if (formatedValue.equals("0.00") && value.getValue() != 0) {
+        if (formatedValue.equals("0.00") && value.getBigInt().longValue() != 0) {
             return formatValue(unitExponent, value, plusSign, minusSign, precision + 2, shift, removeFinalZeroes);
         }
 
@@ -224,7 +287,7 @@ public class GenericUtils {
      */
     public static List<CoinType> getPossibleTypes(String addressStr) throws AddressMalformedException {
         ImmutableList.Builder<CoinType> builder = ImmutableList.builder();
-        tryBitcoinFamilyAddresses(addressStr, builder);
+        tryBitcoinFamilyAddresses(addressStr, builder);tryEthereumFamilyAddresses(addressStr, builder);
         // TODO try other coin addresses
         List<CoinType> possibleTypes = builder.build();
         if (possibleTypes.size() == 0) {
@@ -232,7 +295,13 @@ public class GenericUtils {
         }
         return possibleTypes;
     }
-
+    private static void tryEthereumFamilyAddresses(String addressStr, ImmutableList.Builder<CoinType> builder) {
+        if (addressStr.matches("^(0x)?[0-9a-fA-F]{40}$")) {
+            builder.add(EthereumMain.get());
+            builder.add(EthClassicMain.get());
+            builder.add(ExpanseMain.get());
+        }
+    }
     /**
      * Tries to parse the addressStr as a Bitcoin style address and find potential compatible coin types
      * @param addressStr possible bitcoin type address
@@ -241,7 +310,7 @@ public class GenericUtils {
     private static void tryBitcoinFamilyAddresses(final String addressStr, ImmutableList.Builder<CoinType> builder) {
         VersionedChecksummedBytes parsed;
         try {
-            parsed = new VersionedChecksummedBytes(addressStr) { };
+            parsed = new VersionedChecksummedBytes(20, addressStr) { };
         } catch (AddressFormatException e) { return; }
         int version = parsed.getVersion();
         for (CoinType type : CoinID.getSupportedCoins()) {

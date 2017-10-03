@@ -23,7 +23,7 @@ public class AddressView extends LinearLayout {
     private ImageView iconView;
     private TextView addressLabelView;
     private TextView addressView;
-
+    private boolean isNameShown;
     private boolean isMultiLine;
     private boolean isIconShown;
     private AbstractAddress address;
@@ -41,7 +41,7 @@ public class AddressView extends LinearLayout {
                 R.styleable.Address, 0, 0);
         try {
             isMultiLine = a.getBoolean(R.styleable.Address_multi_line, false);
-            isIconShown = a.getBoolean(R.styleable.Address_show_coin_icon, false);
+            isIconShown = a.getBoolean(R.styleable.Address_show_coin_icon, false);   isNameShown = a.getBoolean(2, false);
         } finally {
             a.recycle();
         }
@@ -66,6 +66,11 @@ public class AddressView extends LinearLayout {
         updateView();
     }
 
+    public void setNameShown(boolean isNameShown) {
+        this.isNameShown = isNameShown;
+        updateView();
+    }
+
     public void setIconShown(boolean isIconShown) {
         this.isIconShown = isIconShown;
         updateView();
@@ -73,6 +78,9 @@ public class AddressView extends LinearLayout {
 
     private void updateView() {
         String label = AddressBookProvider.resolveLabel(getContext(), address);
+        if (label == null && this.isNameShown) {
+            label = this.address.getType().getName();
+        }
         if (label != null) {
             addressLabelView.setText(label);
             addressLabelView.setTypeface(Typeface.DEFAULT);

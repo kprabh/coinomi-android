@@ -346,5 +346,7 @@ public class SerializedKey implements Serializable {
     private TypedKey getFromMiniKey() {
         final ECKey key = ECKey.fromPrivate(content).decompress();
         return new TypedKey(CoinID.getSupportedCoins(), key);
+    }  public Type getKeyType() {
+        return this.keyType;
     }
 }

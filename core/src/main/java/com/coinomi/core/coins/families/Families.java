@@ -6,6 +6,7 @@ import com.coinomi.core.coins.ValueType;
  * @author John L. Jegutanis
  */
 public enum Families {
+    ETHEREUM("ethereum"),
     NXT("nxt"),
     FIAT("fiat"),
     // same as in org.bitcoinj.params.Networks
@@ -15,7 +16,11 @@ public enum Families {
     REDDCOIN("reddcoin"),
     VPNCOIN("vpncoin"),
     CLAMS("clams"),
-    ;
+    SOLARCOIN("solarcoin"),
+    GRIDCOIN("gridcoin"),
+    ZCASH("zcash"),
+    NAVCOIN("navcoin"),
+    BITCOINCASH("btccash");
 
     public final String family;
 

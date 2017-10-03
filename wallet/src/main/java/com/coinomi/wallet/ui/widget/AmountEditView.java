@@ -112,7 +112,7 @@ public class AmountEditView extends LinearLayout {
         if (type == null || !type.equals(newType)) {
             type = newType;
             hint = null;
-            setFormat(newType.getMonetaryFormat());
+            setFormat(newType.getMoneyFormat());
             return true;
         } else {
             return false;
@@ -187,6 +187,7 @@ public class AmountEditView extends LinearLayout {
     }
 
     private void updateAppearance() {
+        Spannable hintSpannable;
         if (type != null) {
             symbol.setText(type.getSymbol());
             symbol.setVisibility(VISIBLE);
@@ -195,8 +196,13 @@ public class AmountEditView extends LinearLayout {
             symbol.setVisibility(GONE);
         }
 
-        final Spannable hintSpannable = new MonetarySpannable(format, amountSigned,
-                hint != null ? hint : Coin.ZERO);
+        if (this.hint != null) {
+            hintSpannable = new MonetarySpannable(this.hint.type.getMoneyFormat().noCode(), this.amountSigned, this.hint);
+        } else if (this.type != null) {
+            hintSpannable = new MonetarySpannable(this.type.getMoneyFormat().noCode(), this.amountSigned, this.type.zeroCoin());
+        } else {
+            hintSpannable = null;
+        }
         amountText.setHint(hintSpannable);
     }
 

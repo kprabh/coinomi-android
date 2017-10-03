@@ -26,6 +26,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 
 import org.bitcoinj.core.Coin;
@@ -121,13 +122,13 @@ public class ExchangeRateBase implements ExchangeRate {
         Value rateTo = getToRateValue(convertingValue.type);
 
         // Use BigDecimal because it's much easier to maintain full precision without overflowing.
-        final BigDecimal converted = BigDecimal.valueOf(convertingValue.value)
-                .multiply(BigDecimal.valueOf(rateTo.value))
-                .divide(BigDecimal.valueOf(rateFrom.value), RoundingMode.HALF_UP);
-        if (converted.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0
+        final BigInteger converted = new BigDecimal(convertingValue.getBigInt())
+                .multiply(new BigDecimal(rateTo.getBigInt()))
+                .divide(new BigDecimal(rateFrom.getBigInt()), RoundingMode.HALF_UP).toBigIntegerExact();;
+       /* if (converted.compareTo(BigDecimal.valueOf(Long.MAX_VALUE)) > 0
                 || converted.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) < 0)
-            throw new ArithmeticException("Overflow");
-        return Value.valueOf(rateTo.type, converted.longValue());
+            throw new ArithmeticException("Overflow");*/
+        return Value.valueOf(rateTo.type, converted);
     }
 
     protected Value getFromRateValue(ValueType fromType) {

@@ -1,7 +1,7 @@
 package com.coinomi.core.coins.nxt;
 
 //import org.json.simple.JSONObject;
-
+import com.coinomi.core.coins.nxt.NxtException.NotValidException;
 import org.json.JSONException;
 import org.json.JSONObject;
 

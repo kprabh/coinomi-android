@@ -35,7 +35,7 @@ public class BitAddress extends Address implements AbstractAddress {
 
     public static BitAddress from(CoinType type, String address) throws AddressMalformedException {
         try {
-            return new BitAddress(type, address);
+            return new BitAddress(Address.fromBase58(type, address));
         } catch (AddressFormatException e) {
             throw new AddressMalformedException(e);
         }
@@ -78,7 +78,7 @@ public class BitAddress extends Address implements AbstractAddress {
             } else if (address instanceof Address) {
                 return new BitAddress((Address) address);
             } else {
-                return new BitAddress(address.getType(), address.toString());
+                return from(address.getType(), address.toString());
             }
         } catch (AddressFormatException e) {
             throw new AddressMalformedException(e);

@@ -9,12 +9,12 @@ import org.bitcoinj.core.TransactionOutPoint;
 import org.bitcoinj.core.TransactionOutput;
 import org.bitcoinj.script.Script;
 
-import static org.bitcoinj.core.TransactionInput.EMPTY_ARRAY;
 
 /**
  * @author John L. Jegutanis
  */
 public class OutPointOutput {
+    private static final byte[] EMPTY_ARRAY = new byte[0];
     final CoinType type;
     final TrimmedOutPoint outPoint;
     final TrimmedOutput output;
@@ -65,7 +65,7 @@ public class OutPointOutput {
     }
 
     public long getValueLong() {
-        return value.value;
+        return value.getValue();
     }
 
     public Value getValue() {

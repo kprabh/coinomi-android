@@ -10,6 +10,7 @@ import android.support.v4.app.DialogFragment;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.View.OnFocusChangeListener;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
@@ -22,27 +23,43 @@ import com.coinomi.wallet.R;
 import com.coinomi.wallet.util.Fonts;
 import com.coinomi.wallet.util.Keyboard;
 import com.coinomi.wallet.util.PasswordQualityChecker;
+import com.coinomi.wallet.util.UiUtils;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.Unbinder;
 
 /**
  * Fragment that sets a password
  */
 public class SetPasswordFragment extends Fragment {
     private static final Logger log = LoggerFactory.getLogger(SetPasswordFragment.class);
-
+    private boolean allowNoPassword;
     private Listener listener;
     private boolean isPasswordGood;
     private boolean isPasswordsMatch;
     private PasswordQualityChecker passwordQualityChecker;
-    private EditText password1;
-    private EditText password2;
-    private TextView errorPassword;
-    private TextView errorPasswordsMismatch;
-
+    private boolean showIcon;
+    @BindView(2131689683)
+    TextView errorPassword;
+    @BindView(2131689760)
+    TextView errorPasswordsMismatch;
+    @BindView(2131689758)
+    EditText password1;
+    @BindView(2131689759)
+    EditText password2;
+    private Unbinder unbinder;
     public static SetPasswordFragment newInstance(Bundle args) {
+        return newInstance(args, false, false);
+    }
+
+    public static SetPasswordFragment newInstance(Bundle args, boolean showIcon, boolean allowNoPassword) {
         SetPasswordFragment fragment = new SetPasswordFragment();
+        args.putBoolean("show_icon", showIcon);
+        args.putBoolean("allow_no_password", allowNoPassword);
         fragment.setArguments(args);
         return fragment;
     }
@@ -57,29 +74,30 @@ public class SetPasswordFragment extends Fragment {
         passwordQualityChecker = new PasswordQualityChecker(getActivity());
         isPasswordGood = false;
         isPasswordsMatch = false;
+        if (getArguments() != null) {
+            this.allowNoPassword = getArguments().getBoolean("allow_no_password", false);
+            this.showIcon = getArguments().getBoolean("show_icon", false);
+        }
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_set_password, container, false);
-
-        Fonts.setTypeface(view.findViewById(R.id.key_icon), Fonts.Font.COINOMI_FONT_ICONS);
-
-        errorPassword = (TextView) view.findViewById(R.id.password_error);
-        errorPasswordsMismatch = (TextView) view.findViewById(R.id.passwords_mismatch);
-
-        clearError(errorPassword);
-        clearError(errorPasswordsMismatch);
-
-        password1 = (EditText) view.findViewById(R.id.password1);
-        password2 = (EditText) view.findViewById(R.id.password2);
-
-        password1.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            @Override
+        this.unbinder = ButterKnife.bind((Object) this, view);
+        if (this.showIcon) {
+            Fonts.setTypeface(ButterKnife.findById(view, (int) R.id.font_icon), Fonts.Font.COINOMI_FONT_ICONS);
+        } else {
+            UiUtils.setGone(ButterKnife.findById(view, (int) R.id.font_icon));
+        }
+        UiUtils.setGone(this.errorPassword);
+        UiUtils.setGone(this.errorPasswordsMismatch);
+        this.password1 = (EditText) view.findViewById(R.id.password1);
+        this.password2 = (EditText) view.findViewById(R.id.password2);
+        this.password1.setOnFocusChangeListener(new OnFocusChangeListener() {
             public void onFocusChange(View textView, boolean hasFocus) {
                 if (hasFocus) {
-                    clearError(errorPassword);
+                    UiUtils.setGone(errorPassword);
                 } else {
                     checkPasswordQuality();
                 }
@@ -90,7 +108,7 @@ public class SetPasswordFragment extends Fragment {
             @Override
             public void onFocusChange(View textView, boolean hasFocus) {
                 if (hasFocus) {
-                    clearError(errorPasswordsMismatch);
+                    UiUtils.setGone(errorPasswordsMismatch);
                 } else {
                     checkPasswordsMatch();
                 }
@@ -101,7 +119,7 @@ public class SetPasswordFragment extends Fragment {
         Button finishButton = (Button) view.findViewById(R.id.button_next);
         finishButton.setOnClickListener(getOnFinishListener());
         finishButton.setImeOptions(EditorInfo.IME_ACTION_DONE);
-
+        if (this.allowNoPassword) {
         // Skip link
         view.findViewById(R.id.password_skip).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -110,11 +128,18 @@ public class SetPasswordFragment extends Fragment {
                 dialog.show(getFragmentManager(), null);
             }
         });
-
+        } else {
+            view.findViewById(R.id.password_skip).setVisibility(View.GONE);
+        }
         return view;
     }
 
-    private void checkPasswordQuality() {
+    public void onDestroyView() {
+        this.unbinder.unbind();
+        super.onDestroyView();
+    }
+
+    private void checkPasswordQuality() {if (this.password1 != null) {
         String pass = password1.getText().toString();
         isPasswordGood = false;
         try {
@@ -129,14 +154,14 @@ public class SetPasswordFragment extends Fragment {
             setError(errorPassword, R.string.password_too_short_error,
                     passwordQualityChecker.getMinPasswordLength());
         }
-        log.info("Password good = {}", isPasswordGood);
+        log.info("Password good = {}", isPasswordGood);}
     }
 
     private void checkPasswordsMatch() {
         String pass1 = password1.getText().toString();
         String pass2 = password2.getText().toString();
         isPasswordsMatch = pass1.equals(pass2);
-        if (!isPasswordsMatch) showError(errorPasswordsMismatch);
+        if (!isPasswordsMatch) UiUtils.setVisible(this.errorPasswordsMismatch);
         log.info("Passwords match = {}", isPasswordsMatch);
     }
 
@@ -202,7 +227,7 @@ public class SetPasswordFragment extends Fragment {
     }
 
     private void setError(TextView errorView, int messageId, Object... formatArgs) {
-        setError(errorView, getResources().getString(messageId, formatArgs));
+        UiUtils.setTextAndVisible(errorView, getResources().getString(messageId, formatArgs));
     }
 
     private void setError(TextView errorView, String message) {

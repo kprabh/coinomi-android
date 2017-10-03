@@ -11,8 +11,16 @@ import com.coinomi.wallet.ExchangeHistoryProvider.ExchangeEntry;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.tasks.AddCoinTask;
 import com.coinomi.wallet.ui.dialogs.ConfirmAddCoinUnlockWalletDialog;
+import com.coinomi.wallet.ui.dialogs.ShapeshiftTermsOfUseDialog;
+import com.coinomi.wallet.util.WalletUtils;
 
+import org.acra.ACRA;
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.KeyCrypterException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 import javax.annotation.Nullable;
 
@@ -22,7 +30,7 @@ public class TradeActivity extends BaseWalletActivity implements
         ConfirmAddCoinUnlockWalletDialog.Listener {
 
     private static final String TRADE_SELECT_FRAGMENT_TAG = "trade_select_fragment_tag";
-
+    private static final Logger log = LoggerFactory.getLogger(TradeActivity.class);
     private int containerRes;
 
     @Override
@@ -32,10 +40,12 @@ public class TradeActivity extends BaseWalletActivity implements
 
         containerRes = R.id.container;
 
-        if (savedInstanceState == null) {
+        if (savedInstanceState == null) {if (getConfiguration().getShapeshiftTermsAccepted()) {
             getSupportFragmentManager().beginTransaction()
                     .add(containerRes, new TradeSelectFragment(), TRADE_SELECT_FRAGMENT_TAG)
-                    .commit();
+                    .commit();} else {
+            ShapeshiftTermsOfUseDialog.newInstance().show(getFM(), "shapeshift_terms_of_use");
+        }
         }
     }
 
@@ -68,6 +78,14 @@ public class TradeActivity extends BaseWalletActivity implements
             getSupportFragmentManager().popBackStack();
             // Ignore wallet decryption errors
             if (!(error instanceof KeyCrypterException)) {
+                CharSequence errorMessage = WalletUtils.getErrorMessage(this, error);
+                if (errorMessage == null) {
+                    if (ACRA.isInitialised()) {
+                        ACRA.getErrorReporter().handleSilentException(error);
+                    }
+                    log.error("An unknown error occurred while sending coins", (Throwable) error);
+                    errorMessage = getString(R.string.send_coins_error, new Object[]{error.getMessage()});
+                }
                 DialogBuilder builder = DialogBuilder.warn(this, R.string.trade_error);
                 builder.setMessage(getString(R.string.trade_error_sign_tx_message, error.getMessage()));
                 builder.setPositiveButton(R.string.button_ok, null)
@@ -85,10 +103,20 @@ public class TradeActivity extends BaseWalletActivity implements
     }
 
     @Override
-    public void addCoin(CoinType type, String description, CharSequence password) {
+    public void addCoin(CoinType type, String description, CharSequence password, List<ChildNumber> customPath) {
         Fragment f = getFM().findFragmentByTag(TRADE_SELECT_FRAGMENT_TAG);
         if (f != null && f.isVisible() && f instanceof TradeSelectFragment) {
-            ((TradeSelectFragment) f).maybeStartAddCoinAndProceedTask(description, password);
+            ((TradeSelectFragment) f).maybeStartAddCoinAndProceedTask(description, password, customPath);
         }
+    }
+
+    public void onTermsAgree() {
+        getConfiguration().setShapeshiftTermAccepted(true);
+        getSupportFragmentManager().beginTransaction().add(this.containerRes, new TradeSelectFragment(), "trade_select_fragment_tag").commit();
+    }
+
+    public void onTermsDisagree() {
+        getConfiguration().setShapeshiftTermAccepted(false);
+        finish();
     }
 }

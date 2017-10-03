@@ -18,6 +18,7 @@ package com.coinomi.wallet.util;
  */
 
 
+import android.content.Context;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.text.Spannable;
@@ -26,7 +27,9 @@ import android.text.style.StyleSpan;
 
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
+import com.coinomi.core.exceptions.NoSuchPocketException;
 import com.coinomi.core.util.Currencies;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
@@ -34,9 +37,14 @@ import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.core.wallet.WalletAccount;
 import com.coinomi.wallet.Constants;
+import com.coinomi.wallet.R;
 
+import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.core.Sha256Hash;
+import org.bitcoinj.crypto.KeyCrypterException;
+import org.bitcoinj.wallet.Wallet;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
@@ -92,7 +100,7 @@ public class WalletUtils {
     public static List<AbstractAddress> getReceivedWithOrFrom(@Nonnull final AbstractTransaction tx,
                                                               @Nonnull final AbstractWallet pocket) {
         // TODO a better approach is to use a "features" enum list and check agaist that
-        if (pocket.getCoinType() instanceof NxtFamily) {
+        if (pocket.getCoinType() instanceof NxtFamily || pocket.getCoinType() instanceof EthFamily) {
             return tx.getReceivedFrom();
         } else {
             return getToAddresses(tx, pocket, true);
@@ -165,5 +173,33 @@ public class WalletUtils {
         }
 
         return currencyName;
+    }
+
+    public static String getErrorMessage(Context context, Throwable error) {
+        if ((error instanceof WalletAccount.WalletAccountException) && error.getCause() != null) {
+            error = error.getCause();
+        }
+        if (error instanceof InsufficientMoneyException) {
+            return context.getString(R.string.amount_error_not_enough_money_missing, new Object[]{((InsufficientMoneyException) error).missing});
+        } else if (error instanceof NoSuchPocketException) {
+            return context.getString(R.string.no_such_pocket_error);
+        } else {
+            if (error instanceof KeyCrypterException) {
+                return context.getString(R.string.password_failed);
+            }
+            if (error instanceof IOException) {
+                return context.getString(R.string.send_coins_error_network);
+            }
+            if (error instanceof Wallet.DustySendRequested) {
+                return context.getString(R.string.send_coins_error_dust);
+            }
+            if (error instanceof Wallet.CouldNotAdjustDownwards) {
+                return context.getString(R.string.amount_error_not_enough_money_fees);
+            }
+            if (error instanceof Wallet.ExceededMaxTransactionSize) {
+                return context.getString(R.string.send_coins_error_size);
+            }
+            return null;
+        }
     }
 }

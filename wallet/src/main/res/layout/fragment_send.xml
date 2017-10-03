@@ -107,15 +107,25 @@
                             android:visibility="gone"/>
                     </LinearLayout>
                 </RelativeLayout>
-
-                <TextView
-                    android:id="@+id/amount_to_send_label"
-                    style="@style/SecondaryText"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:orientation="horizontal"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/activity_vertical_margin"
-                    android:text="@string/amount_to_send_label" />
-
+                    android:layout_marginTop="@dimen/activity_vertical_margin">
+                    <TextView
+                        android:id="@+id/amount_to_send_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="amount_to_send_label"
+                        android:layout_weight="1.0"
+                        style="@style/SecondaryText" />
+                    <Button
+                        android:id="@+id/use_all_funds"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="action_empty_wallet"
+                        style="@style/BorderlessButtonLink" />
+                </LinearLayout>
                 <LinearLayout
                     android:id="@+id/amounts"
                     android:orientation="horizontal"

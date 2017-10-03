@@ -102,7 +102,9 @@ final public class WalletActivity extends BaseWalletActivity implements
     private OverviewFragment overviewFragment;
     @Nullable private AccountFragment accountFragment;
 
-    public WalletActivity() {}
+    public WalletActivity() {
+
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -327,7 +329,7 @@ final public class WalletActivity extends BaseWalletActivity implements
     }
 
     private void openAccount(WalletAccount account, boolean selectInNavDrawer) {
-        if (account != null && !isFinishing()) {
+        if (account != null && !isChangingConfigurations() && !isFinishing()) {
             if (isAccountVisible(account)) return;
 
             FragmentTransaction ft = getFM().beginTransaction();
@@ -344,7 +346,7 @@ final public class WalletActivity extends BaseWalletActivity implements
                 ft.add(R.id.contents, accountFragment, ACCOUNT_TAG);
                 getWalletApplication().getConfiguration().touchLastAccountId(lastAccountId);
             }
-            ft.commit();
+            ft.commitAllowingStateLoss();
 
             setAccountTitle(account);
             isOverviewVisible = false;
@@ -615,7 +617,7 @@ final public class WalletActivity extends BaseWalletActivity implements
             sweepWallet(null);
             return true;
         } else if (id == R.id.action_support) {
-            sendSupportEmail();
+            goToSupportWebsite();
             return true;
         } else if (id == R.id.action_about) {
             startActivity(new Intent(WalletActivity.this, AboutActivity.class));
@@ -623,6 +625,13 @@ final public class WalletActivity extends BaseWalletActivity implements
         }
 
         return super.onOptionsItemSelected(item);
+    }
+    private void goToSupportWebsite() {
+        try {
+            startActivity(new Intent("android.intent.action.VIEW", Uri.parse("https://coinomi.freshdesk.com")));
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(this, R.string.error_generic, 0).show();
+        }
     }
 
     private void sendSupportEmail() {
@@ -775,6 +784,9 @@ final public class WalletActivity extends BaseWalletActivity implements
         finishActionMode();
     }
 
+    public void onContractsSelected() {
+        finishActionMode();
+    }
 
     private void finishActionMode() {
         if (lastActionMode != null) {

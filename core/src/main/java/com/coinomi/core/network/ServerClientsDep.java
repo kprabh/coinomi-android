@@ -19,7 +19,7 @@ import javax.annotation.Nullable;
 /**
  * @author John L. Jegutanis
  */
-public class ServerClients {
+public class ServerClientsDep {
     private static final Logger log = LoggerFactory.getLogger(ServerClient.class);
     private final ConnectivityHelper connectivityHelper;
     private HashMap<CoinType, BlockchainConnection> connections = new HashMap<>();
@@ -33,12 +33,12 @@ public class ServerClients {
     private File cacheDir;
     private int cacheSize;
 
-    public ServerClients(List<CoinAddress> coins) {
+    public ServerClientsDep(List<CoinAddress> coins) {
         // Supply a dumb ConnectivityHelper that reports that connection is always available
         this(coins, DEFAULT_CONNECTIVITY_HELPER);
     }
 
-    public ServerClients(List<CoinAddress> coinAddresses, ConnectivityHelper connectivityHelper) {
+    public ServerClientsDep(List<CoinAddress> coinAddresses, ConnectivityHelper connectivityHelper) {
         this.connectivityHelper = connectivityHelper;
         setupAddresses(coinAddresses);
     }

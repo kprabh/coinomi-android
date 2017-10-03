@@ -5,6 +5,7 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.nxt.Convert;
 import com.coinomi.core.coins.nxt.NxtException;
 import com.coinomi.core.coins.nxt.Transaction;
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.exceptions.TransactionBroadcastException;
 import com.coinomi.core.network.AddressStatus;
 import com.coinomi.core.network.BlockHeader;
@@ -30,6 +31,7 @@ import com.google.common.collect.ImmutableMap;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Utils;
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.utils.ListenerRegistration;
@@ -108,7 +110,8 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
     }
 
     public NxtFamilyWallet(String id, NxtFamilyKey key, CoinType type) {
-        super(type, id);
+        super(type, id);lastBlockSeenHeight = -1;
+        lastBlockSeenTimeSecs = 0;
         rootKey = key;
         address = new NxtAddress(type, key.getPublicKey());
         balance = type.value(0);
@@ -126,19 +129,36 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
         return rootKey.getPublicKey();
     }
 
+    public boolean hasPrivKey() {
+        return this.rootKey.hasPrivKey();
+    }
     @Override
     public String getPublicKeyMnemonic() {
         return address.getRsAccount();
     }
+    public DeterministicKey getDeterministicRootKey() throws UnsupportedOperationException {
+        return this.rootKey.getRootKey();
+    }
+    public void resetRootKey(DeterministicKey key) throws UnsupportedOperationException, ResetKeyException {
+        this.lock.lock();
+        try {
+            this.rootKey.resetRootKey(key);
+        } finally {
+            this.lock.unlock();
+        }
+    }
 
+    public int getLastBlockSeenHeight() {
+        return this.lastBlockSeenHeight;
+    }
     @Override
-    public SendRequest getEmptyWalletRequest(AbstractAddress destination) throws WalletAccountException {
+    public SendRequest getEmptyWalletRequest(AbstractAddress destination, byte[] contractData) throws WalletAccountException {
         checkAddress(destination);
         return NxtSendRequest.emptyWallet(this, (NxtAddress) destination);
     }
 
     @Override
-    public SendRequest getSendToRequest(AbstractAddress destination, Value amount) throws WalletAccountException {
+    public SendRequest getSendToRequest(AbstractAddress destination, Value amount, byte[] contractDatab) throws WalletAccountException {
         checkAddress(destination);
         return NxtSendRequest.to(this, (NxtAddress) destination, amount);
     }
@@ -173,16 +193,16 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
     public void completeTransaction(NxtSendRequest request) throws WalletAccountException {
         checkArgument(!request.isCompleted(), "Given SendRequest has already been completed.");
 
-        if (request.type.getTransactionVersion() > 0) {
-            request.nxtTxBuilder.ecBlockHeight(lastEcBlockHeight);
-            request.nxtTxBuilder.ecBlockId(lastEcBlockId);
+        if (request.type.getTransactionVersion() > 0) {request.setEcBlock(this.lastEcBlockId, this.lastEcBlockHeight);
+            //request.nxtTxBuilder.ecBlockHeight(lastEcBlockHeight);
+            //request.nxtTxBuilder.ecBlockId(lastEcBlockId);
         }
 
         // TODO check if the destination public key was announced and if so, remove it from the tx:
         // request.nxtTxBuilder.publicKeyAnnouncement(null);
 
         try {
-            request.tx = new NxtTransaction(type, request.nxtTxBuilder.build());
+            request.buildTx();
             request.setCompleted(true);
         } catch (NxtException.NotValidException e) {
             throw new WalletAccount.WalletAccountException(e);
@@ -878,6 +898,13 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
         //queueOnTransactionBroadcastSuccess(tx);
     }
 
+    public int getAccountIndex() {
+        return this.rootKey.getAccountIndex();
+    }
+
+    public ImmutableList<ChildNumber> getDeterministicRootKeyPath() {
+        return this.rootKey.getRootKey().getPath();
+    }
     @Override
     public void onTransactionBroadcastError(NxtTransaction tx) {
         //queueOnTransactionBroadcastFailure(tx);

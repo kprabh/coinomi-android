@@ -40,6 +40,7 @@ import com.coinomi.wallet.ExchangeHistoryProvider;
 import com.coinomi.wallet.ExchangeHistoryProvider.ExchangeEntry;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
+import com.coinomi.wallet.ui.widget.AddressView;
 import com.coinomi.wallet.util.Fonts;
 import com.coinomi.wallet.util.WeakHandler;
 
@@ -50,6 +51,10 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
 
 import static com.coinomi.core.Preconditions.checkNotNull;
 import static com.coinomi.wallet.util.UiUtils.setGone;
@@ -73,29 +78,45 @@ public class TradeStatusFragment extends Fragment {
     private static final String ARG_SHOW_EXIT_BUTTON = "show_exit_button";
 
     private Listener listener;
+
     private ContentResolver contentResolver;
     private LoaderManager loaderManager;
-    private TextView exchangeInfo;
-    private TextView depositIcon;
-    private ProgressBar depositProgress;
-    private TextView depositText;
-    private TextView exchangeIcon;
-    private ProgressBar exchangeProgress;
-    private TextView exchangeText;
-    private TextView errorIcon;
-    private TextView errorText;
-    private Button viewTransaction;
-    private Button emailReceipt;
     private MenuItem actionDeleteMenu;
     private boolean showExitButton;
-
+    @BindView(2131689795)
+    AddressView depositAddress;
+    @BindView(2131689792)
+    TextView depositIcon;
+    @BindView(2131689793)
+    ProgressBar depositProgress;
+    @BindView(2131689794)
+    TextView depositText;
+    @BindView(2131689804)
+    Button emailReceipt;
+    @BindView(2131689801)
+    TextView errorIcon;
+    @BindView(2131689802)
+    TextView errorText;
+    @BindView(2131689800)
+    AddressView exchangeAddress;
+    @BindView(2131689797)
+    TextView exchangeIcon;
+    @BindView(2131689791)
+    TextView exchangeInfo;
+    @BindView(2131689798)
+    ProgressBar exchangeProgress;
+    @BindView(2131689799)
+    TextView exchangeText;
+    @BindView(2131689796)
     private Uri statusUri;
+    @BindView(2131689803)
+    Button viewTransaction;
     private ExchangeEntry exchangeStatus;
     private StatusPollTask pollTask;
     private final Handler handler = new MyHandler(this);
     private Timer timer;
     private WalletApplication application;
-
+    View exchangeWithdrawView;
 
     private static class StatusPollTask extends TimerTask {
         private final ShapeShift shapeShift;
@@ -243,7 +264,10 @@ public class TradeStatusFragment extends Fragment {
 
         return view;
     }
-
+    public void onDestroyView() {
+      //  ButterKnife.unbind(this);
+        super.onDestroyView();
+    }
     @Override
     public void onPause() {
         super.onPause();

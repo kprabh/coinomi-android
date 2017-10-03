@@ -21,11 +21,13 @@ package com.coinomi.core.uri;
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.families.bitcoin.BitAddress;
+import com.coinomi.core.wallet.families.eth.EthAddress;
 import com.coinomi.core.wallet.families.nxt.NxtAddress;
 import com.google.common.collect.Lists;
 
@@ -213,6 +215,16 @@ public class CoinURI implements Serializable {
                         putWithValidation(FIELD_ADDRESS, address);
                         break;
                     } catch (RuntimeException e) {  /* continue */ }
+                } else if (possibleType instanceof EthFamily) {
+                    try {
+                        address = new EthAddress(possibleType, addressToken);
+                        try {
+                            putWithValidation("address", address);
+                            break;
+                        } catch (RuntimeException e4) {
+                        }
+                    } catch (RuntimeException e5) {
+                    }
                 } else {
                     try {
                         address = BitAddress.from(possibleType, addressToken);

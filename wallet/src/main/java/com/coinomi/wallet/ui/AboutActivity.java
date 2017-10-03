@@ -10,6 +10,7 @@ import com.coinomi.wallet.util.Fonts;
 
 import butterknife.ButterKnife;
 import butterknife.OnClick;
+import com.coinomi.wallet.ui.dialogs.WhatsNew;
 
 public class AboutActivity extends BaseWalletActivity {
 
@@ -39,5 +40,10 @@ public class AboutActivity extends BaseWalletActivity {
                 .setTitle(R.string.terms_of_service_title)
                 .setMessage(R.string.terms_of_service)
                 .setPositiveButton(R.string.button_ok, null).create().show();
+    }
+
+    @OnClick({2131689600})
+    void onWhatsNewClick() {
+        WhatsNew.newInstance().show(getFM(), "whats_new_tag");
     }
 }

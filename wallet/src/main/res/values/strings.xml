@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="show_default">Show default</string>
     <string name="app_name" translatable="false">Coinomi (dev)</string>
     <string name="app_package" translatable="false">com.coinomi.wallet.dev</string>
     <string name="coinomi_website" translatable="false">https://coinomi.com</string>
@@ -27,6 +28,7 @@
     <string name="error_camera">Could not access the device camera</string>
     <!-- Generic items -->
     <string name="button_ok">OK</string>
+    <string name="wallet_key_reset_error">Could not change the wallet password\n\n%1$s</string>
     <string name="button_next">Next</string>
     <string name="button_finish">Finish</string>
     <string name="button_return">Return</string>
@@ -337,6 +339,7 @@
     <!-- ShapeShift -->
     <string name="about_shapeshift_title">About ShapeShift.io</string>
     <string name="about_shapeshift_message">ShapeShift.io is an instant altcoin exchange that provides Bitcoin and altcoin conversion. The platform (available in both web and API flavors) represents the fastest, most efficient way to convert between Bitcoin and dozens of altcoins within the Bitcoin ecosystem. No account needed.</string>
+    <string name="shapeshift_terms_of_service">shapeshift terms of service</string>
     <!-- Sign Message -->
     <string name="title_activity_sign_verify_message">Sign/verify message</string>
     <string name="signing_info">You can sign or verify a message using an address.</string>
@@ -395,9 +398,62 @@
     <string name="tx_fees_per_kilobyte">per kilobyte of transaction data</string>
     <string name="tx_fees_per_byte">per byte of transaction data</string>
     <string name="tx_fees_per_transaction">per transaction</string>
-
+    <string name="action_contracts">Contracts</string>
+    <string name="amount_error_not_enough_money_missing">Not enough money, missing %1$s</string>
+    <string name="change_password_info">To change your password, enter your current password or press the \'Forgot password?\' button to use your recovery phrase.</string>
+    <string name="choose_function">Choose a function to interact with the contract</string>
+    <string name="clear_function_history">Clear history?</string>
+    <string name="contract_balance">Contract Balance</string>
+    <string name="contract_functions_label">Functions</string>
+    <string name="contracts_info">Select a contract that you wish to interact with. The contracts are provided by third parties and caution is advised before using them.</string>
+    <string name="estimating_fees">Estimating fees…</string>
+    <string name="eth_logs_data">Data</string>
+    <string name="eth_logs_topic">Topics</string>
+    <string name="eth_tx_logs">Event Logs</string>
+    <string name="execute_contract_function">Execute</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="function_error">Error processing this function</string>
+    <string name="function_no_inputs">This function has no inputs</string>
+    <string name="get_contract_info_error">Could not get contract information</string>
+    <string name="restore_error_wrong_seed">The recovery phrase entered does not belong to this wallet. Check if you need to enter a BIP39 passphrase.</string>
+    <string name="restore_verifying_seed">Verifying seed…</string>
+    <string name="title_activity_change_password">Change password</string>
+    <string name="title_activity_contract_details">Contract details</string>
+    <string name="tx_fees_per_gas">the gas price</string>
+    <string name="whatsnew">What\'s new</string>
+    <string name="function_default">Default function</string>
+    <string name="ellipsis">…</string>
     <!-- Terms -->
+    <string name="wallet_key_reset">Please wait while changing the wallet password</string>
+    <string name="wallet_key_reset_ok">Wallet password changed</string>
+    <string name="account_derivation_path">Derivation path (BIP32)</string>
+    <string name="advanced_settings">Advanced Settings</string>
+    <string name="amount_error_not_enough_money_fees">Not enough money to cover fees</string>
+    <string name="cannot_convert_to_btc_address">This address cannot be converted to Bitcoin address</string>
+    <string name="change_fees">Change fees</string>
+    <string name="confirm_info">Please confirm your recovery phrase</string>
     <string name="terms_of_service_title">Terms of service</string>
+    <string name="contract_abi">Contract ABI</string>
+    <string name="contract_add">Add Contract</string>
+    <string name="contract_added_successfully">Contract added successfully</string>
+    <string name="contract_address">Contract Address</string>
+    <string name="contract_name">Name</string>
+    <string name="contract_website">Website</string>
+    <string name="convert_to_btc_address">Convert to Bitcoin address</string>
+    <string name="erase_last_word">Erase last word</string>
+    <string name="error_contract_suit">Your operating system does not support enhanced contracts</string>
+    <string name="estimating_fees_error">Could not estimate fees, using default.</string>
+    <string name="function_input_empty">Empty fields!</string>
+    <string name="invalid_contract_abi">Invalid contract ABI</string>
+    <string name="invalid_contract_address">Invalid contract address</string>
+    <string name="invalid_contract_name">Contract name is empty</string>
+    <string name="recovery_phrase">This is your recovery phrase</string>
+    <string name="seed_warning">If you lose your recovery phrase, your wallet cannot be recovered.</string>
+    <string name="send_coins_error_size">The transaction is bigger than what the network allows, try sending a different amount</string>
+    <string name="sponsored_by">Server infrastructure sponsored by</string>
+    <string name="wallet_title_contracts">dApps</string>
+    <string name="block_height">Height: %1$s</string>
+    <string name="contract_suit">Contract Suit</string>
     <!-- TODO translate to other languages -->
     <string name="terms_of_service" translatable="false">LEGAL DISCLAIMER\n
 \n
@@ -450,5 +506,5 @@ The user of the wallet agrees to arbitrate any dispute arising from or in connec
 8. Last amendment\n
 \n
 This disclaimer was amended for the last time on January 1st, 2016.</string>
-
+    <string name="whatsnewtext">New in version 1.7.2.3\n \n - Added BitcoinCash support\n \n New in version 1.7.2.2\n \n - Better handle transaction error messages\n - Improve error handling when changing passwords\n \n New in version 1.7.2.1\n \n - Fix unit exponent for Flashcoin and Hempcoin\n - Move the change log dialog to the About screen\n \n New in version 1.7.2\n \n - Better error messages when exchanging\n - Fix rare issue with changing password not being saved\n - Update Digibyte fees\n - Fix issues with Gulden, Smileycoin\n - Added coins: Defcoin, Denarius, Ecoin, Flashcoin, Hempcoin, Linx, Pinkcoin, Putincoin, Neurocoin, UltimateSecureCash\n \n New in version 1.7.1\n \n - Crypto library update\n - Support is handled from a dedicated website\n - Fix minor Navcoin incompatibility\n - Added coins: LBRY Credits, Zcoin Britcoin, Compcoin, Belacoin\n \n New in version 1.7.0.1\n \n - Bitcoin fee tweaks and fixes\n - Fix application UI freezing in some cases\n - Fix crash when estimating fees and connection is not available\n \n New in version 1.6.9.1\n \n - Internal library updates\n - Custom derivation path (BIP32) when adding a coin\n - Fix syscoin segwit compatibility\n - Fixed BIP44 paths for E-Gulden and IoP\n - Renamed VPN to VASH\n - Added coins: Gamecredits, PoSW Coin, Internet of People, Bitcoinplus, Shreeji\n \n New in version 1.6.8\n \n - Added dynamic fees to Bitcoin\n - Fix issue with Exchange timeout\n - Calculate fees per byte for Bitcoin and Dash\n - Lowered Dash fees\n - Fixed fees for NuShares and NuBits\n - Display coin name when an address is ambiguous\n - Updated Shadowcash block explorer\n - Usability fixes\n - Added coins: PIVX, Stratis, Einsteinium\n \n New in version 1.6.7\n \n - Improved exchange history\n - Added sponsors\n - Ethereum contract fixes\n - Updated fees for NuShares\n - Added coins: Landcoin\n \n New in version 1.6.6\n \n - Added coins: Abncoin, Expanse, Landcoin, Navcoin\n - dApp support for ethereum based coins\n - Default available ethereum tokens: DGD, FirstBloodToken, Golem, Iconomi, REP, SingularDTVToken, vSlice\n - SYS to BTC address conversion\n - Block height label on balance screen\n - Fix issue where the app stuck on startup\n - Small usability fix when creating a wallet\n - Allow sweeping any type of WIF key from any coin type\n</string>
 </resources>

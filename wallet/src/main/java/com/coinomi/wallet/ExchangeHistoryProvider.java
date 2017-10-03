@@ -4,16 +4,20 @@ import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
-
+import android.support.v4.app.NotificationCompat;
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftTxStatus;
+import com.coinomi.core.exchange.shapeshift.data.ShapeShiftTxStatus.Status;
 import com.coinomi.core.wallet.AbstractAddress;
 
 import java.io.Serializable;
@@ -69,7 +73,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
         AbstractAddress withdrawAddress;
         Value withdrawAmount;
         String withdrawTxId;
-
+        String error;
         try {
             CoinType withdrawType = CoinID.typeFromId(cursor.getString(cursor.getColumnIndexOrThrow(KEY_WITHDRAW_COIN_ID)));
             withdrawAddress = withdrawType.newAddress(cursor.getString(cursor.getColumnIndexOrThrow(KEY_WITHDRAW_ADDRESS)));
@@ -80,9 +84,13 @@ public class ExchangeHistoryProvider extends ContentProvider {
             withdrawAmount = null;
             withdrawTxId = null;
         }
-
+        try {
+            error = cursor.getString(cursor.getColumnIndexOrThrow("error"));
+        } catch (Exception e4) {
+            error = null;
+        }
         return new ExchangeEntry(status, depositAddress, depositAmount, depositTxId,
-                withdrawAddress, withdrawAmount, withdrawTxId);
+                withdrawAddress, withdrawAmount, withdrawTxId,error);
     }
 
 
@@ -239,7 +247,17 @@ public class ExchangeHistoryProvider extends ContentProvider {
                 throw new UnsupportedOperationException("old=" + oldVersion);
             }
         }
-
+        private void resetTable(SQLiteDatabase db, int oldVersion) {
+            String oldTableName = "exchange_history_table_v" + oldVersion;
+            db.execSQL("ALTER TABLE exchange_history RENAME TO " + oldTableName);
+            db.execSQL("CREATE TABLE exchange_history (_id INTEGER PRIMARY KEY AUTOINCREMENT, status INTEGER NOT NULL, deposit_address TEXT NOT NULL, deposit_coin_id TEXT NOT NULL, deposit_amount_unit BLOB NOT NULL, deposit_txid TEXT NOT NULL, withdraw_address TEXT NULL, withdraw_coin_id TEXT NULL, withdraw_amount_unit BLOB NULL, withdraw_txid TEXT NULL, error TEXT NULL);");
+            Cursor cursor = db.rawQuery("SELECT * FROM " + oldTableName, new String[0]);
+            while (cursor.moveToNext()) {
+                db.insertOrThrow("exchange_history", null, ExchangeHistoryProvider.getExchangeEntry(cursor).getContentValues());
+            }
+            cursor.close();
+            db.execSQL("DROP TABLE " + oldTableName);
+        }
         private String renameCoinId(String fieldName, String from, String to) {
             return "UPDATE " + DATABASE_TABLE + " SET " + fieldName +
                     " = replace(" + fieldName + ", \"" + from + "\", \"" + to + "\") " +
@@ -258,6 +276,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
         public final AbstractAddress depositAddress;
         public final Value depositAmount;
         public final String depositTransactionId;
+        public final String error;
         public final AbstractAddress withdrawAddress;
         public final Value withdrawAmount;
         public final String withdrawTransactionId;
@@ -265,7 +284,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
         public ExchangeEntry(int status, @Nonnull AbstractAddress depositAddress,
                              @Nonnull Value depositAmount, @Nonnull String depositTransactionId,
                              AbstractAddress withdrawAddress, Value withdrawAmount,
-                             String withdrawTransactionId) {
+                             String withdrawTransactionId, String error) {
             this.status = status;
             this.depositAddress = checkNotNull(depositAddress);
             this.depositAmount = checkNotNull(depositAmount);
@@ -273,10 +292,11 @@ public class ExchangeHistoryProvider extends ContentProvider {
             this.withdrawAddress = withdrawAddress;
             this.withdrawAmount = withdrawAmount;
             this.withdrawTransactionId = withdrawTransactionId;
+            this.error = error;
         }
 
         public ExchangeEntry(AbstractAddress depositAddress, Value depositAmount, String depositTxId) {
-            this(STATUS_INITIAL, depositAddress, depositAmount, depositTxId, null, null, null);
+            this(STATUS_INITIAL, depositAddress, depositAmount, depositTxId, null, null, null, null);
         }
 
         public ExchangeEntry(ExchangeEntry initialEntry, ShapeShiftTxStatus txStatus) {
@@ -289,6 +309,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
             this.withdrawAddress = txStatus.withdraw;
             this.withdrawAmount = txStatus.outgoingValue;
             this.withdrawTransactionId = txStatus.transactionId;
+            this.error = txStatus.errorMessage;
         }
 
         public ContentValues getContentValues() {
@@ -296,12 +317,14 @@ public class ExchangeHistoryProvider extends ContentProvider {
             values.put(KEY_STATUS, status);
             values.put(KEY_DEPOSIT_ADDRESS, depositAddress.toString());
             values.put(KEY_DEPOSIT_COIN_ID, depositAddress.getType().getId());
-            values.put(KEY_DEPOSIT_AMOUNT_UNIT, depositAmount.value);
+            values.put(KEY_DEPOSIT_AMOUNT_UNIT, depositAmount.getBigInt().toByteArray());
             values.put(KEY_DEPOSIT_TXID, depositTransactionId);
             if (withdrawAddress != null) values.put(KEY_WITHDRAW_ADDRESS, withdrawAddress.toString());
             if (withdrawAddress != null) values.put(KEY_WITHDRAW_COIN_ID, withdrawAddress.getType().getId());
-            if (withdrawAmount != null) values.put(KEY_WITHDRAW_AMOUNT_UNIT, withdrawAmount.value);
-            if (withdrawTransactionId != null) values.put(KEY_WITHDRAW_TXID, withdrawTransactionId);
+            if (withdrawAmount != null) values.put(KEY_WITHDRAW_AMOUNT_UNIT, withdrawAmount.getBigInt().toByteArray());
+            if (withdrawTransactionId != null) values.put(KEY_WITHDRAW_TXID, withdrawTransactionId); if (this.error != null) {
+                values.put("error", this.error);
+            }
             return values;
         }
 

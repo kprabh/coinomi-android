@@ -1,8 +1,5 @@
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
-import com.coinomi.core.wallet.families.bitcoin.CoinSelection;
-import com.coinomi.core.wallet.families.bitcoin.CoinSelector;
-import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.bitcoinj.core.Coin;
@@ -18,7 +15,6 @@ import java.util.List;
 /**
  * @author John L. Jegutanis
  */
-
 
 
 /**

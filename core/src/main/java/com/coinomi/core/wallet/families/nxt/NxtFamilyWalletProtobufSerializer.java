@@ -25,7 +25,7 @@ import com.google.protobuf.ByteString;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.crypto.KeyCrypter;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -15,9 +15,11 @@ import com.coinomi.wallet.R;
 import com.coinomi.wallet.tasks.AddCoinTask;
 import com.coinomi.wallet.ui.dialogs.ConfirmAddCoinUnlockWalletDialog;
 
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.KeyCrypterException;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import javax.annotation.CheckForNull;
 
@@ -73,9 +75,9 @@ public class AddCoinsActivity extends BaseWalletActivity
     }
 
     @Override
-    public void addCoin(CoinType type, String description, CharSequence password) {
+    public void addCoin(CoinType type, String description, CharSequence password, List<ChildNumber> customPath) {
         if (type != null && addCoinTask == null) {
-            addCoinTask = new AddCoinTask(this, type, wallet, description, password);
+            addCoinTask = new AddCoinTask(this, type, wallet, description, password, customPath);
             addCoinTask.execute();
         }
     }

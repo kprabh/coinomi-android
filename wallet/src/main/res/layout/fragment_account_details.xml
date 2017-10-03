@@ -50,6 +50,18 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/account_public_key_warning" />
+                    <TextView
+                        android:id="@+id/derivation_path_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="account_derivation_path"
+                        style="@style/SecondaryText" />
+                    <TextView
+                        android:typeface="monospace"
+                        android:id="@+id/derivation_path"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        style="@style/NormalText" />
                 </LinearLayout>
 
                 <LinearLayout

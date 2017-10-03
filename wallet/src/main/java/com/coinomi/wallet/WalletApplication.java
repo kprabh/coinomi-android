@@ -10,11 +10,13 @@ import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.StrictMode;
+import android.os.StrictMode.ThreadPolicy.Builder;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
 
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.CoinType.FeeProvider;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.exchange.shapeshift.ShapeShift;
 import com.coinomi.core.util.HardwareSoftwareCompliance;
@@ -23,6 +25,7 @@ import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
 import com.coinomi.core.wallet.WalletProtobufSerializer;
 import com.coinomi.wallet.service.CoinService;
+import com.coinomi.wallet.service.CoinService.ServiceMode;
 import com.coinomi.wallet.service.CoinServiceImpl;
 import com.coinomi.wallet.util.Fonts;
 import com.coinomi.wallet.util.LinuxSecureRandom;
@@ -34,7 +37,7 @@ import org.acra.ACRA;
 import org.acra.annotation.ReportsCrashes;
 import org.acra.sender.HttpSender;
 import org.bitcoinj.crypto.MnemonicCode;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,13 +69,13 @@ public class WalletApplication extends Application {
     private Intent coinServiceIntent;
     private Intent coinServiceConnectIntent;
     private Intent coinServiceCancelCoinsReceivedIntent;
-
+    private File walletDbFolder;
     private File walletFile;
     @Nullable
     private Wallet wallet;
     private PackageInfo packageInfo;
     private String versionString;
-
+    private boolean whatsNew = false;
     private long lastStop;
     private ConnectivityManager connManager;
     private ShapeShift shapeShift;
@@ -80,11 +83,10 @@ public class WalletApplication extends Application {
 
     @Override
     public void onCreate() {
-//        ACRA.init(this);
-
-        config = new Configuration(PreferenceManager.getDefaultSharedPreferences(this));
-
-        new LinuxSecureRandom(); // init proper random number generator
+        ACRA.init(this);
+        if (!ACRA.isACRASenderServiceProcess()) {
+            this.config = new Configuration(PreferenceManager.getDefaultSharedPreferences(this));
+            LinuxSecureRandom linuxSecureRandom = new LinuxSecureRandom();
         performComplianceTests();
 
         initLogging();
@@ -121,13 +123,20 @@ public class WalletApplication extends Application {
         config.updateLastVersionCode(packageInfo.versionCode);
 
         connManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-
+            walletDbFolder = createFolderIfNeed(getFileStreamPath("wallet_db"));
         walletFile = getFileStreamPath(Constants.WALLET_FILENAME_PROTOBUF);
         loadWallet();
 
         afterLoadWallet();
 
         Fonts.initFonts(this.getAssets());
+        }
+    }
+    private File createFolderIfNeed(File path) {
+        if (!path.exists()) {
+            path.mkdirs();
+        }
+        return path;
     }
 
     private void createTxCache() {
@@ -161,7 +170,7 @@ public class WalletApplication extends Application {
     public ShapeShift getShapeShift() {
         if (shapeShift == null) {
             shapeShift = new ShapeShift(NetworkUtils.getHttpClient(getApplicationContext()));
-        }
+        } this.shapeShift.setApiPublicKey("66acba9c39b3d176196f6923e79b6ccf976039001fe2ca1283d2300c7fec34e6775a580436d55d8382e46133d610d3ce1bb31b5558e67b8e743a834d57bb7dd1");
         return shapeShift;
     }
 
@@ -347,26 +356,16 @@ public class WalletApplication extends Application {
         if (walletFile.exists()) {
             final long start = System.currentTimeMillis();
 
-            FileInputStream walletStream = null;
-
             try {
-                walletStream = new FileInputStream(walletFile);
-
-                setWallet(WalletProtobufSerializer.readWallet(walletStream));
+                setWallet(Wallet.loadFromFile(this.walletFile, this.walletDbFolder));
 
                 log.info("wallet loaded from: '" + walletFile + "', took " + (System.currentTimeMillis() - start) + "ms");
-            } catch (final FileNotFoundException e) {
+            } /*catch (final FileNotFoundException e) {
                 ACRA.getErrorReporter().handleException(e);
                 Toast.makeText(WalletApplication.this, R.string.error_could_not_read_wallet, Toast.LENGTH_LONG).show();
-            } catch (final UnreadableWalletException e) {
+            }*/ catch (final UnreadableWalletException e) {
                 Toast.makeText(WalletApplication.this, R.string.error_could_not_read_wallet, Toast.LENGTH_LONG).show();
                 ACRA.getErrorReporter().handleException(e);
-            } finally {
-                if (walletStream != null) {
-                    try {
-                        walletStream.close();
-                    } catch (final IOException x) { /* ignore */ }
-                }
             }
         }
     }
@@ -435,4 +434,8 @@ public class WalletApplication extends Application {
             startService(coinServiceConnectIntent);
         }
     }
+
+    public File getWalletDbFolder() {
+        return this.walletDbFolder;
+}
 }

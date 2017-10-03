@@ -14,7 +14,7 @@ import android.os.SystemClock;
 import android.text.format.DateUtils;
 
 import com.coinomi.core.network.ConnectivityHelper;
-import com.coinomi.core.network.ServerClients;
+import com.coinomi.core.network.ServerClientController;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
@@ -46,7 +46,7 @@ public class CoinServiceImpl extends Service implements CoinService {
     private BroadcastReceiver connectivityReceiver;
 
     @CheckForNull
-    private ServerClients clients;
+    private ServerClientController clients;
 
     private String lastAccount;
 
@@ -235,8 +235,8 @@ public class CoinServiceImpl extends Service implements CoinService {
         }
     };
 
-    private ServerClients getServerClients(Wallet wallet) {
-        ServerClients newClients = new ServerClients(Constants.DEFAULT_COINS_SERVERS, connHelper);
+    private ServerClientController getServerClients(Wallet wallet) {
+        ServerClientController newClients = new ServerClientController(Constants.DEFAULT_COINS_SERVERS, connHelper);
         if (application.getTxCachePath() != null) {
             newClients.setCacheDir(application.getTxCachePath(), Constants.TX_CACHE_SIZE);
         }
@@ -271,7 +271,6 @@ public class CoinServiceImpl extends Service implements CoinService {
     }
 
     private final IBinder mBinder = new LocalBinder();
-
     @Override
     public IBinder onBind(final Intent intent) {
         log.debug(".onBind()");

@@ -16,21 +16,18 @@
  * limitations under the License.
  */
 
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
-import com.coinomi.core.coins.Value;
-import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.exceptions.Bip44KeyLookAheadExceededException;
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.protos.Protos;
 import com.coinomi.core.util.KeyUtils;
-import com.coinomi.core.wallet.families.bitcoin.BitAddress;
-import com.coinomi.core.wallet.families.bitcoin.BitSendRequest;
+import com.coinomi.core.wallet.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.ECKey;
-import org.bitcoinj.core.InsufficientMoneyException;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
@@ -40,9 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
 
-import java.security.SignatureException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -56,7 +51,6 @@ import static com.coinomi.core.Preconditions.checkArgument;
 import static com.coinomi.core.Preconditions.checkNotNull;
 import static com.coinomi.core.Preconditions.checkState;
 import static com.coinomi.core.util.BitAddressUtils.getHash160;
-import static com.coinomi.core.util.BitAddressUtils.isP2SHAddress;
 import static org.bitcoinj.wallet.KeyChain.KeyPurpose.CHANGE;
 import static org.bitcoinj.wallet.KeyChain.KeyPurpose.RECEIVE_FUNDS;
 import static org.bitcoinj.wallet.KeyChain.KeyPurpose.REFUND;
@@ -104,7 +98,9 @@ public class WalletPocketHD extends BitWalletBase {
         }
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////
+    public ImmutableList<ChildNumber> getDeterministicRootKeyPath() {
+        return this.keys.getRootKey().getPath();
+    } ////////////////////////////////////////////////////////////////////////////////////////////////
     //
     // Serialization support
     //
@@ -209,7 +205,7 @@ public class WalletPocketHD extends BitWalletBase {
         DeterministicKey key = keys.getWatchingKey();
         ImmutableList<ChildNumber> path = ImmutableList.of(key.getChildNumber());
         key = new DeterministicKey(path, key.getChainCode(), key.getPubKeyPoint(), null, null);
-        return key.serializePubB58();
+        return key.serializePubB58(type);
     }
 
     @Override
@@ -260,6 +256,16 @@ public class WalletPocketHD extends BitWalletBase {
     @Override
     public RedeemData findRedeemDataFromScriptHash(byte[] bytes) {
         return null;
+    }
+    public boolean hasPrivKey() {
+        return this.keys.hasPrivKey();
+    }
+    public DeterministicKey getDeterministicRootKey() throws UnsupportedOperationException {
+        return this.keys.getRootKey();
+    }
+
+    public void resetRootKey(DeterministicKey rootKey) throws UnsupportedOperationException, ResetKeyException {
+        this.keys.resetRootKey(rootKey);
     }
 
     @Override

@@ -1,14 +1,18 @@
 package com.coinomi.wallet;
 
 import android.content.SharedPreferences;
+import android.content.SharedPreferences.Editor;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.text.format.DateUtils;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.coins.ValueType;
 import com.coinomi.wallet.util.WalletUtils;
 import com.google.common.collect.ImmutableMap;
-
+import com.google.common.collect.ImmutableMap.Builder;
+import java.util.Map;
+import java.util.Set;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -78,21 +82,34 @@ public class Configuration {
     }
 
     public void updateLastVersionCode(final int currentVersionCode) {
-        if (currentVersionCode != lastVersionCode) {
-            prefs.edit().putInt(PREFS_KEY_LAST_VERSION, currentVersionCode).apply();
-        }
-
+        int lastVersionCode = getLastVersionCode();
+        prefs.edit().putInt(PREFS_KEY_LAST_VERSION, currentVersionCode).apply();
         if (currentVersionCode > lastVersionCode)
             log.info("detected app upgrade: " + lastVersionCode + " -> " + currentVersionCode);
         else if (currentVersionCode < lastVersionCode)
             log.warn("detected app downgrade: " + lastVersionCode + " -> " + currentVersionCode);
-
-        applyUpdates();
+        applyUpdates(lastVersionCode);
     }
 
-    private void applyUpdates() {
-        if (prefs.contains(PREFS_KEY_LAST_POCKET)) {
-            prefs.edit().remove(PREFS_KEY_LAST_POCKET).apply();
+    public int getLastVersionCode() {
+        return this.prefs.getInt("last_version", 0);
+    }
+
+    private void applyUpdates(int lastVersionCode) {
+        if (lastVersionCode < 70) {
+            if (this.prefs.contains("last_pocket")) {
+                this.prefs.edit().remove("last_pocket").apply();
+            }
+            if (this.prefs.contains("whats_new")) {
+                this.prefs.edit().remove("whats_new").apply();
+            }
+            resetFeeValue("bitcoin.main");
+            resetFeeValue("dash.main");
+            resetFeeValue("nushares.main");
+            resetFeeValue("nubits.main");
+        }
+        if (lastVersionCode < 76) {
+            resetFeeValue("digibyte.main");
         }
     }
 
@@ -123,11 +140,11 @@ public class Configuration {
         }
     }
 
-    public Map<CoinType, Value> getFeeValues() {
+    public Map<CoinType, Value> getFeeValues(Set<CoinType> forTypes) {
         JSONObject feesJson = getFeesJson();
         ImmutableMap.Builder<CoinType, Value> feesMapBuilder = ImmutableMap.builder();
 
-        for (CoinType type : Constants.SUPPORTED_COINS) {
+        for (CoinType type : forTypes) {
             Value fee = getFeeFromJson(feesJson, type);
             feesMapBuilder.put(type, fee);
         }
@@ -140,8 +157,12 @@ public class Configuration {
     }
 
     public void resetFeeValue(CoinType type) {
+        resetFeeValue(type.getId());
+    }
+
+    void resetFeeValue(String id) {
         JSONObject feesJson = getFeesJson();
-        feesJson.remove(type.getId());
+        feesJson.remove(id);
         prefs.edit().putString(PREFS_KEY_FEES, feesJson.toString()).apply();
 
     }
@@ -246,4 +267,11 @@ public class Configuration {
         prefs.edit().putBoolean(PREFS_KEY_TERMS_ACCEPTED, isTermsAccepted).apply();
     }
 
+    public boolean getShapeshiftTermsAccepted() {
+        return this.prefs.getBoolean("shapeshift_terms_accepted", false);
+    }
+
+    public void setShapeshiftTermAccepted(boolean isTermsAccepted) {
+        this.prefs.edit().putBoolean("shapeshift_terms_accepted", isTermsAccepted).apply();
+    }
 }

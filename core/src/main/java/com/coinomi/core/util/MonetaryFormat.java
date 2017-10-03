@@ -30,6 +30,8 @@ import static com.google.common.math.LongMath.checkedPow;
 import static com.google.common.math.LongMath.divide;
 
 import java.io.Serializable;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
@@ -38,7 +40,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import org.bitcoinj.core.Monetary;
 
 /**
  * <p>
@@ -67,7 +68,7 @@ public final class MonetaryFormat implements Serializable {
     public static final String CODE_MBTC = "mBTC";
     /** Currency code for base 1/1000000 Bitcoin. */
     public static final String CODE_UBTC = "µBTC";
-
+    private final boolean removeFinalZeroes;
     private final char negativeSign;
     private final char positiveSign;
     private final char zeroDigit;
@@ -79,9 +80,15 @@ public final class MonetaryFormat implements Serializable {
     private final Map<Integer, String> codes;
     private final char codeSeparator;
     private final boolean codePrefixed;
-
+    private final boolean allowRoundToZero;
     private static final String DECIMALS_PADDING = "0000000000000000"; // a few more than necessary for Bitcoin
+    public interface Monetary extends Serializable {
+        BigInteger getBigInt();
 
+        int signum();
+
+        int smallestUnitExponent();
+    }
     /**
      * Set character to prefix negative values.
      */
@@ -92,7 +99,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -105,7 +112,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -116,7 +123,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -130,7 +137,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -144,7 +151,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -167,7 +174,7 @@ public final class MonetaryFormat implements Serializable {
         for (int group : groups)
             decimalGroups.add(group);
         return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                shift, roundingMode, codes, codeSeparator, codePrefixed);
+                shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -193,7 +200,7 @@ public final class MonetaryFormat implements Serializable {
         for (int i = 0; i < repetitions; i++)
             decimalGroups.add(decimals);
         return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                shift, roundingMode, codes, codeSeparator, codePrefixed);
+                shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -205,7 +212,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -216,7 +223,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -227,7 +234,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, null, codeSeparator, codePrefixed);
+                    shift, roundingMode, null, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -245,7 +252,7 @@ public final class MonetaryFormat implements Serializable {
             codes.putAll(this.codes);
         codes.put(codeShift, code);
         return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                shift, roundingMode, codes, codeSeparator, codePrefixed);
+                shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -258,7 +265,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, codePrefixed);
+                    shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -269,7 +276,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, true);
+                    shift, roundingMode, codes, codeSeparator, true, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -280,7 +287,7 @@ public final class MonetaryFormat implements Serializable {
             return this;
         else
             return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                    shift, roundingMode, codes, codeSeparator, false);
+                    shift, roundingMode, codes, codeSeparator, false, removeFinalZeroes, allowRoundToZero);
     }
 
     /**
@@ -292,9 +299,14 @@ public final class MonetaryFormat implements Serializable {
         char zeroDigit = dfs.getZeroDigit();
         char decimalMark = dfs.getMonetaryDecimalSeparator();
         return new MonetaryFormat(negativeSign, positiveSign, zeroDigit, decimalMark, minDecimals, decimalGroups,
-                shift, roundingMode, codes, codeSeparator, codePrefixed);
+                shift, roundingMode, codes, codeSeparator, codePrefixed, removeFinalZeroes, allowRoundToZero);
     }
-
+    public MonetaryFormat removeFinalZeroes(boolean remove) {
+        if (this.removeFinalZeroes == remove) {
+            return this;
+        }
+        return new MonetaryFormat(this.negativeSign, this.positiveSign, this.zeroDigit, this.decimalMark, this.minDecimals, this.decimalGroups, this.shift, this.roundingMode, this.codes, this.codeSeparator, this.codePrefixed, remove, this.allowRoundToZero);
+    }
     public MonetaryFormat() {
         // defaults
         this.negativeSign = '-';
@@ -311,11 +323,13 @@ public final class MonetaryFormat implements Serializable {
         this.codes.put(6, CODE_UBTC);
         this.codeSeparator = ' ';
         this.codePrefixed = true;
+        this.removeFinalZeroes = false;
+        this.allowRoundToZero = false;
     }
 
     private MonetaryFormat(char negativeSign, char positiveSign, char zeroDigit, char decimalMark, int minDecimals,
                            List<Integer> decimalGroups, int shift, RoundingMode roundingMode, Map<Integer, String> codes,
-                           char codeSeparator, boolean codePrefixed) {
+                           char codeSeparator, boolean codePrefixed, boolean removeFinalZeroes, boolean allowRoundToZero) {
         this.negativeSign = negativeSign;
         this.positiveSign = positiveSign;
         this.zeroDigit = zeroDigit;
@@ -327,6 +341,8 @@ public final class MonetaryFormat implements Serializable {
         this.codes = codes;
         this.codeSeparator = codeSeparator;
         this.codePrefixed = codePrefixed;
+        this.removeFinalZeroes = removeFinalZeroes;
+        this.allowRoundToZero = allowRoundToZero;
     }
 
     /**
@@ -341,21 +357,9 @@ public final class MonetaryFormat implements Serializable {
      */
     public CharSequence format(Monetary monetary, int smallestUnitExponent) {
         // preparation
-        int maxDecimals = minDecimals;
-        if (decimalGroups != null)
-            for (int group : decimalGroups)
-                maxDecimals += group;
-        checkState(maxDecimals <= smallestUnitExponent);
-
-        // rounding
-        long satoshis = Math.abs(monetary.getValue());
-        long precisionDivisor = checkedPow(10, smallestUnitExponent - shift - maxDecimals);
-        satoshis = checkedMultiply(divide(satoshis, precisionDivisor, roundingMode), precisionDivisor);
-
-        // shifting
-        long shiftDivisor = checkedPow(10, smallestUnitExponent - shift);
-        long numbers = satoshis / shiftDivisor;
-        long decimals = satoshis % shiftDivisor;
+        BigDecimal[] numbersAndDecimals = getRoundedSatoshis(monetary, smallestUnitExponent).divideAndRemainder(BigDecimal.TEN.pow(smallestUnitExponent - this.shift));
+        BigInteger numbers = numbersAndDecimals[0].toBigInteger();
+        BigInteger decimals = numbersAndDecimals[1].toBigInteger();
 
         // formatting
         String decimalsStr = String.format(Locale.US, "%0" + (smallestUnitExponent - shift) + "d", decimals);
@@ -372,11 +376,15 @@ public final class MonetaryFormat implements Serializable {
                 }
                 i += group;
             }
+        } if (this.removeFinalZeroes) {
+            while (str.length() > 0 && str.charAt(str.length() - 1) == '0') {
+                str.setLength(str.length() - 1);
+            }
         }
         if (str.length() > 0)
             str.insert(0, decimalMark);
         str.insert(0, numbers);
-        if (monetary.getValue() < 0)
+        if (monetary.getBigInt().signum() < 0)
             str.insert(0, negativeSign);
         else if (positiveSign != 0)
             str.insert(0, positiveSign);
@@ -401,7 +409,36 @@ public final class MonetaryFormat implements Serializable {
         }
         return str;
     }
-
+    private BigDecimal getRoundedSatoshis(Monetary monetary, int smallestUnitExponent) {
+        BigDecimal satoshis = new BigDecimal(monetary.getBigInt()).abs();
+        if (satoshis.equals(BigDecimal.ZERO)) {
+            return satoshis;
+        }
+        int maxDecimals = this.minDecimals;
+        if (this.decimalGroups != null) {
+            for (Integer intValue : this.decimalGroups) {
+                maxDecimals += intValue.intValue();
+            }
+        }
+        checkState(checkMaxDecimals(smallestUnitExponent, maxDecimals));
+        BigDecimal roundedSatoshis = BigDecimal.ZERO;
+        for (int i = 0; i <= smallestUnitExponent - this.shift && checkMaxDecimals(smallestUnitExponent, maxDecimals); i++) {
+            BigDecimal precisionDivisor = BigDecimal.TEN.pow((smallestUnitExponent - this.shift) - maxDecimals);
+            roundedSatoshis = satoshis.divide(precisionDivisor, this.roundingMode).multiply(precisionDivisor);
+            if (this.allowRoundToZero || !roundedSatoshis.equals(BigDecimal.ZERO)) {
+                break;
+            }
+            if (!checkMaxDecimals(smallestUnitExponent, this.minDecimals + maxDecimals)) {
+                if (!checkMaxDecimals(smallestUnitExponent, maxDecimals + 1)) {
+                    break;
+                }
+                maxDecimals++;
+            } else {
+                maxDecimals += this.minDecimals;
+            }
+        }
+        return roundedSatoshis;
+    }
 //    /**
 //     * Parse a human readable coin value to a {@link org.bitcoinj.core.Coin} instance.
 //     *
@@ -431,7 +468,9 @@ public final class MonetaryFormat implements Serializable {
     public Value parse(ValueType type, String str) throws NumberFormatException {
         return Value.valueOf(type, parseValue(str, type.getUnitExponent()));
     }
-
+    private boolean checkMaxDecimals(int smallestUnitExponent, int maxDecimals) {
+        return this.shift + maxDecimals <= smallestUnitExponent;
+    }
     /**
      * Parse a human readable fiat value to a {@link com.coinomi.core.coins.Value} instance.
      *
@@ -439,10 +478,10 @@ public final class MonetaryFormat implements Serializable {
      *             if the string cannot be parsed for some reason
      */
     public Value parseFiat(String currencyCode, String str) throws NumberFormatException {
-        return FiatValue.valueOf(currencyCode, parseValue(str, FiatType.SMALLEST_UNIT_EXPONENT));
+        return FiatValue.valueOf(currencyCode, parseValue(str, FiatType.SMALLEST_UNIT_EXPONENT).toString());
     }
 
-    private long parseValue(String str, int smallestUnitExponent) {
+    private BigInteger parseValue(String str, int smallestUnitExponent) {
         checkState(DECIMALS_PADDING.length() >= smallestUnitExponent);
         if (str.isEmpty())
             throw new NumberFormatException("empty string");
@@ -465,9 +504,9 @@ public final class MonetaryFormat implements Serializable {
         for (char c : satoshis.toCharArray())
             if (!Character.isDigit(c))
                 throw new NumberFormatException("illegal character: " + c);
-        long value = Long.parseLong(satoshis); // Non-arabic digits allowed here.
+        BigInteger value = new BigInteger(satoshis); // Non-arabic digits allowed here.
         if (first == negativeSign)
-            value = -value;
+            return value.negate();
         return value;
     }
 

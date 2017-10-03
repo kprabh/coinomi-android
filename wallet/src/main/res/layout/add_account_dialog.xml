@@ -48,5 +48,23 @@
             <requestFocus />
 
         </EditText>
+        <Button
+            android:id="@+id/advanced_settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="advanced_settings"
+            style="@style/BorderlessButtonLink" />
+        <TextView android:id="@+id/custom_path_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="account_derivation_path"
+            style="@style/SecondaryText" />
+        <EditText android:id="@+id/custom_path"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:inputType="text|textCapCharacters|textCapWords|textCapSentences|textAutoCorrect|textAutoComplete|textMultiLine|textImeMultiLine|textNoSuggestions|textUri|textEmailAddress|textEmailSubject|textShortMessage|textLongMessage|textPersonName|textPostalAddress|textPassword|textVisiblePassword|textWebEditText|textFilter|textPhonetic|textWebEmailAddress|textWebPassword|phone"
+            android:imeOptions="flagNoExtractUi"
+            style="@style/NormalText" />
     </LinearLayout>
 </ScrollView>

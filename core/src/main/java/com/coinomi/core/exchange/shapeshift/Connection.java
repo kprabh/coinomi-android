@@ -2,13 +2,13 @@ package com.coinomi.core.exchange.shapeshift;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import com.squareup.okhttp.Cache;
-import com.squareup.okhttp.ConnectionSpec;
-import com.squareup.okhttp.OkHttpClient;
 
 import java.io.File;
 import java.net.URL;
 import java.util.Collections;
+import okhttp3.ConnectionSpec;
+import okhttp3.OkHttpClient;
+import okhttp3.OkHttpClient.Builder;
 
 /**
  * @author John L. Jegutanis
@@ -23,25 +23,18 @@ abstract public class Connection {
         this.client = client;
     }
 
-    protected Connection() {
+    /*protected Connection() {
         client = new OkHttpClient();
         client.setConnectionSpecs(Collections.singletonList(ConnectionSpec.MODERN_TLS));
+    }*/
+    protected Connection() {
+        this.baseUrl = "https://shapeshift.io/";
+        this.client = getBuilder().build();
     }
 
-    /**
-     * Setup caching. The cache directory should be private, and untrusted applications should not
-     * be able to read its contents!
-     */
-    public void setCache(File cacheDirectory) {
-        int cacheSize = 256 * 1024; // 256 KiB
-        Cache cache = new Cache(cacheDirectory, cacheSize);
-        client.setCache(cache);
+    private static Builder getBuilder() {
+        return new Builder().connectionSpecs(Collections.singletonList(ConnectionSpec.MODERN_TLS));
     }
-
-    public boolean isCacheSet() {
-        return client.getCache() != null;
-    }
-
     protected String getApiUrl(String path) {
         return baseUrl + path;
     }

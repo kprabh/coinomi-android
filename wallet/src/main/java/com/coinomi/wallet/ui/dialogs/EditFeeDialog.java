@@ -20,7 +20,7 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.DialogBuilder;
 import com.coinomi.wallet.ui.widget.AmountEditView;
 
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 
 import static com.coinomi.core.Preconditions.checkState;
@@ -29,9 +29,9 @@ import static com.coinomi.core.Preconditions.checkState;
  * @author John L. Jegutanis
  */
 public class EditFeeDialog extends DialogFragment {
-    @Bind(R.id.fee_description)
+    @BindView(R.id.fee_description)
     TextView description;
-    @Bind(R.id.fee_amount)
+    @BindView(R.id.fee_amount)
     AmountEditView feeAmount;
     Configuration configuration;
     Resources resources;
@@ -63,12 +63,14 @@ public class EditFeeDialog extends DialogFragment {
         feeAmount.resetType(type);
 
         String feePolicy;
-        switch (type.getFeePolicy()) {
+        switch (type.getFeePolicy()) {case FEE_PER_KB_APPLY_PER_BYTE:
             case FEE_PER_KB:
                 feePolicy = resources.getString(R.string.tx_fees_per_kilobyte);
                 break;
             case FLAT_FEE:
                 feePolicy = resources.getString(R.string.tx_fees_per_transaction);
+                break; case FEE_GAS_PRICE:
+                feePolicy = this.resources.getString(R.string.tx_fees_per_gas);
                 break;
             default:
                 throw new RuntimeException("Unknown fee policy " + type.getFeePolicy());

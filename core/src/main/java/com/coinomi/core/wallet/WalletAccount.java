@@ -3,10 +3,14 @@ package com.coinomi.core.wallet;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.ValueType;
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.exceptions.TransactionBroadcastException;
 import com.coinomi.core.network.interfaces.ConnectionEventListener;
+import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.Sha256Hash;
+import org.bitcoinj.crypto.ChildNumber;
+import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.wallet.KeyBag;
 
@@ -41,11 +45,11 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
     void setDescription(String description);
     byte[] getPublicKey();
     CoinType getCoinType();
-
+    String getDefaultAccountName();
     boolean isNew();
 
     Value getBalance();
-
+    boolean isStandardPath();
     void refresh();
 
     boolean isConnected();
@@ -62,6 +66,9 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
      * Get current receive address, does not mark it as used.
      */
     AbstractAddress getReceiveAddress();
+    DeterministicKey getDeterministicRootKey() throws UnsupportedOperationException;
+
+    ImmutableList<ChildNumber> getDeterministicRootKeyPath();
 
     /**
      * Get current refund address, does not mark it as used.
@@ -107,25 +114,28 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
     KeyCrypter getKeyCrypter();
     void encrypt(KeyCrypter keyCrypter, KeyParameter aesKey);
     void decrypt(KeyParameter aesKey);
+    boolean hasPrivKey();
 
     boolean equals(WalletAccount otherAccount);
-
+    int getLastBlockSeenHeight();
     void addEventListener(WalletAccountEventListener listener);
     void addEventListener(WalletAccountEventListener listener, Executor executor);
     boolean removeEventListener(WalletAccountEventListener listener);
-
+    int getAccountIndex();
     boolean isType(WalletAccount other);
     boolean isType(ValueType type);
     boolean isType(AbstractAddress address);
 
     boolean isAddressMine(AbstractAddress address);
 
+    void resetRootKey(DeterministicKey deterministicKey) throws UnsupportedOperationException, ResetKeyException;
+
     void maybeInitializeAllKeys();
 
     String getPublicKeyMnemonic();
 
-    SendRequest getEmptyWalletRequest(AbstractAddress destination) throws WalletAccountException;
-    SendRequest getSendToRequest(AbstractAddress destination, Value amount) throws WalletAccountException;
+    SendRequest getEmptyWalletRequest(AbstractAddress destination, byte[] bArr) throws WalletAccountException;
+    SendRequest getSendToRequest(AbstractAddress destination, Value amount, byte[] bArr) throws WalletAccountException;
 
     void completeAndSignTx(SendRequest request) throws WalletAccountException;
     void completeTransaction(SendRequest request) throws WalletAccountException;

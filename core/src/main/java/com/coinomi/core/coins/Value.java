@@ -18,7 +18,8 @@ package com.coinomi.core.coins;
  */
 
 import org.bitcoinj.core.Coin;
-import org.bitcoinj.core.Monetary;
+
+import com.coinomi.core.util.MonetaryFormat;
 import com.google.common.math.LongMath;
 
 import java.io.Serializable;
@@ -35,7 +36,7 @@ import static com.google.common.base.Preconditions.checkState;
 /**
  * Represents a monetary value. This class is immutable.
  */
-public class Value implements Monetary, Comparable<Value>, Serializable {
+public class Value implements MonetaryFormat.Monetary, Comparable<Value>, Serializable {
     /**
      * The type of this value
      */
@@ -43,16 +44,8 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
     /**
      * The number of units of this monetary value.
      */
-    public final long value;
+    public final BigInteger value;
 
-    Value(final ValueType type, final long units) {
-        this.type = checkNotNull(type);
-        this.value = units;
-    }
-
-    public static Value valueOf(final ValueType type, final long units) {
-        return new Value(type, units);
-    }
 
     @Nullable
     public static Value valueOf(final ValueType type, @Nullable final Coin coin) {
@@ -60,29 +53,62 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
         return null;
     }
 
+    public static Value valueOf(ValueType type, byte[] units) {
+        return new Value(type, units);
+    }
+
+    public static Value valueOf(ValueType type, long units) {
+        return new Value(type, units);
+    }
+
     public static Value valueOf(final ValueType type, BigInteger units) {
-        return new Value(type, units.longValue());
+        return new Value(type, units);
     }
 
     public static Value valueOf(final ValueType type, String unitsStr) {
-        return valueOf(type, new BigInteger(unitsStr));
+        BigInteger v;
+        if (unitsStr.startsWith("0x")) {
+            v = new BigInteger(unitsStr.replace("0x", ""), 16);
+        } else {
+            v = new BigInteger(unitsStr);
+        }
+        return valueOf(type, v);
+    }
+
+    public Value(ValueType type, long units) {
+        this.type = checkNotNull(type);
+        this.value = BigInteger.valueOf(units);
+    }
+
+    public Value(ValueType type, byte[] units) {
+        this(type, new BigInteger(units));
+    }
+
+    public Value(ValueType type, BigInteger units) {
+        this.type = checkNotNull(type);
+        this.value = units;
     }
 
     @Override
+
     public int smallestUnitExponent() {
         return type.getUnitExponent();
+    }
+
+    public BigInteger getBigInt() {
+        return this.value;
     }
 
     /**
      * Returns the number of units of this monetary value.
      */
-    @Override
+    @Deprecated
     public long getValue() {
-        return value;
+        return this.value.longValue();
     }
-
+    @Deprecated
     public Coin toCoin() {
-        return Coin.valueOf(value);
+        return Coin.valueOf(getValue());
     }
 
     /**
@@ -116,56 +142,60 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
      */
     public static Value parse(final ValueType type, final BigDecimal decimal) {
         return Value.valueOf(type, decimal.movePointRight(type.getUnitExponent())
-                .toBigIntegerExact().longValue());
+                .toBigIntegerExact());
+    }
+
+    public static Value parse(ValueType type, double value) {
+        return valueOf(type, new BigDecimal(value).setScale(type.getUnitExponent(), 4).unscaledValue());
     }
 
     public Value add(final Value value) {
         checkArgument(type.equals(value.type), "Cannot add a different type");
-        return new Value(this.type, LongMath.checkedAdd(this.value, value.value));
+        return new Value(this.type, this.value.add(value.getBigInt()));
     }
 
     public Value add(final Coin value) {
-        return new Value(this.type, LongMath.checkedAdd(this.value, value.value));
+        return new Value(this.type, LongMath.checkedAdd(getValue(), value.value));
     }
 
-    public Value add(final long value) {
-        return new Value(this.type, LongMath.checkedAdd(this.value, value));
-    }
+    /*public Value add(final BigInteger value) {
+        return new Value(this.type, LongMath.checkedAdd(getValue(), value));
+    }*/
 
     public Value subtract(final Value value) {
         checkArgument(type.equals(value.type), "Cannot subtract a different type");
-        return new Value(this.type, LongMath.checkedSubtract(this.value, value.value));
+        return subtract(value.getBigInt());
     }
 
     public Value subtract(final Coin value) {
-        return new Value(this.type, LongMath.checkedSubtract(this.value, value.value));
+        return new Value(this.type, LongMath.checkedSubtract(getValue(), value.getValue()));
     }
 
     public Value subtract(String str) {
         return subtract(type.value(str));
     }
 
-    public Value subtract(long value) {
-        return new Value(this.type, LongMath.checkedSubtract(this.value, value));
+    public Value subtract(BigInteger value) {
+        return new Value(this.type, this.value.subtract(value));
     }
 
     public Value multiply(final long factor) {
-        return new Value(this.type, LongMath.checkedMultiply(this.value, factor));
+        return new Value(this.type, this.value.multiply(BigInteger.valueOf(factor)));
     }
 
     public Value divide(final long divisor) {
-        return new Value(this.type, this.value / divisor);
+        return new Value(this.type, this.value.divide(BigInteger.valueOf(divisor)));
     }
 
-    public Value[] divideAndRemainder(final long divisor) {
+/*    public Value[] divideAndRemainder(final long divisor) {
         return new Value[] { new Value(this.type, this.value / divisor),
                              new Value(this.type, this.value % divisor) };
-    }
+    }*/
 
-    public long divide(final Value divisor) {
+    /*public long divide(final Value divisor) {
         checkArgument(type.equals(divisor.type), "Cannot divide with a different type");
         return this.value / divisor.value;
-    }
+    }*/
 
     /**
      * Returns true if and only if this instance represents a monetary value greater than zero,
@@ -207,23 +237,21 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
         return compareTo(other) < 0;
     }
 
-    public Value shiftLeft(final int n) {
-        return new Value(this.type, this.value << n);
-    }
-
-    public Value shiftRight(final int n) {
-        return new Value(this.type, this.value >> n);
-    }
+//    public Value shiftLeft(final int n) {
+//        return new Value(this.type, this.value << n);
+//    }
+//
+//    public Value shiftRight(final int n) {
+//        return new Value(this.type, this.value >> n);
+//    }
 
     @Override
     public int signum() {
-        if (this.value == 0)
-            return 0;
-        return this.value < 0 ? -1 : 1;
+        return this.value.signum();
     }
 
     public Value negate() {
-        return new Value(this.type, -this.value);
+        return new Value(this.type, this.value.negate());
     }
 
     /**
@@ -231,7 +259,7 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
      * if necessary, but two will always be present.
      */
     public String toFriendlyString() {
-        return type.getMonetaryFormat().format(this).toString();
+        return type.getMoneyFormat().format(this).toString();
     }
 
     /**
@@ -254,7 +282,7 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
      * Returns the value expressed as string
      */
     public String toUnitsString() {
-        return BigInteger.valueOf(value).toString();
+        return value.toString();
     }
 
     @Override
@@ -271,15 +299,13 @@ public class Value implements Monetary, Comparable<Value>, Serializable {
 
     @Override
     public int hashCode() {
-        return (int) this.value;
+        return value.intValue();
     }
 
     @Override
     public int compareTo(@Nonnull final Value other) {
         checkArgument(type.equals(other.type), "Cannot compare different types");
-        if (this.value == other.value)
-            return 0;
-        return this.value > other.value ? 1 : -1;
+        return getBigInt().compareTo(other.getBigInt());
     }
 
     public boolean isDust() {

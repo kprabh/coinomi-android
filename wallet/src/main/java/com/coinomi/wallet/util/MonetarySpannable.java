@@ -27,7 +27,6 @@ import android.text.style.StyleSpan;
 import com.coinomi.core.util.MonetaryFormat;
 import com.coinomi.wallet.Constants;
 
-import org.bitcoinj.core.Monetary;
 
 import java.util.regex.Matcher;
 
@@ -40,16 +39,16 @@ import static com.google.common.base.Preconditions.checkArgument;
  * @author Andreas Schildbach
  */
 public final class MonetarySpannable extends SpannableString {
-    public MonetarySpannable(final MonetaryFormat format, final boolean signed, @Nullable final Monetary value) {
+    public MonetarySpannable(final MonetaryFormat format, final boolean signed, @Nullable final MonetaryFormat.Monetary value) {
         super(format(format, signed, value));
     }
 
-    public MonetarySpannable(final MonetaryFormat format, @Nullable final Monetary value) {
+    public MonetarySpannable(final MonetaryFormat format, @Nullable final MonetaryFormat.Monetary value) {
         super(format(format, false, value));
     }
 
     private static CharSequence format(final MonetaryFormat format, final boolean signed,
-                                       final Monetary value) {
+                                       final MonetaryFormat.Monetary value) {
         if (value == null)
             return "";
 

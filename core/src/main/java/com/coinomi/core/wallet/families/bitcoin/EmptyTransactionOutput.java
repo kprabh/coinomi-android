@@ -1,6 +1,7 @@
 package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.CoinID;
 
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.NetworkParameters;
@@ -8,18 +9,20 @@ import org.bitcoinj.core.Transaction;
 import org.bitcoinj.core.TransactionOutput;
 import org.spongycastle.util.encoders.Hex;
 
+import java.util.HashMap;
+import java.util.List;
+
 /**
  * @author John L. Jegutanis
  */
 public class EmptyTransactionOutput extends TransactionOutput {
-    private static EmptyTransactionOutput instance =
-            new EmptyTransactionOutput(new FakeNetworkParameters(), null, Coin.ZERO,
-                    Hex.decode("76a914000000000000000000000000000000000000000088ac"));
+    private static List<CoinType> types = CoinID.getSupportedCoins();
+    private static HashMap<CoinType, EmptyTransactionOutput> instances = new HashMap(types.size());
+    private static byte[] fakeScript = Hex.decode("76a914000000000000000000000000000000000000000088ac");
 
-    static class FakeNetworkParameters extends NetworkParameters {
-        @Override
-        public String getPaymentProtocolId() {
-            return "";
+    static {
+        for (CoinType type : types) {
+            instances.put(type, new EmptyTransactionOutput(type, null, Coin.ZERO, fakeScript));
         }
     }
 
@@ -27,8 +30,12 @@ public class EmptyTransactionOutput extends TransactionOutput {
         super(params, parent, value, scriptBytes);
     }
 
-    public static synchronized EmptyTransactionOutput get() {
-        return instance;
+    public static synchronized EmptyTransactionOutput get(CoinType type) {
+        EmptyTransactionOutput emptyTransactionOutput;
+        synchronized (EmptyTransactionOutput.class) {
+            emptyTransactionOutput = (EmptyTransactionOutput) instances.get(type);
+        }
+        return emptyTransactionOutput;
     }
 
     @Override

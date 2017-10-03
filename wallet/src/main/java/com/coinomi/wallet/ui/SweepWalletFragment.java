@@ -21,8 +21,8 @@ import android.widget.Toast;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.network.ConnectivityHelper;
-import com.coinomi.core.network.ServerClients;
-import com.coinomi.core.wallet.BitWalletSingleKey;
+import com.coinomi.core.network.ServerClientController;
+import com.coinomi.core.wallet.families.bitcoin.BitWalletSingleKey;
 import com.coinomi.core.wallet.SendRequest;
 import com.coinomi.core.wallet.SerializedKey;
 import com.coinomi.core.wallet.WalletAccount;
@@ -31,6 +31,8 @@ import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.util.Keyboard;
+import com.coinomi.wallet.util.UiUtils;
+import com.coinomi.wallet.util.WalletUtils;
 import com.coinomi.wallet.util.WeakHandler;
 
 import org.bitcoinj.core.TransactionInput;
@@ -40,7 +42,8 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 
-import butterknife.Bind;
+import butterknife.Unbinder;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.OnFocusChange;
@@ -60,7 +63,7 @@ public class SweepWalletFragment extends Fragment {
     private static final Logger log = LoggerFactory.getLogger(SweepWalletFragment.class);
 
     private static final int REQUEST_CODE_SCAN = 0;
-
+    private String errorMsg;
     private static final String ERROR = "error";
     private static final String STATUS = "status";
 
@@ -69,23 +72,23 @@ public class SweepWalletFragment extends Fragment {
 
     // FIXME: Improve this: a reference to the task even if the fragment is recreated
     static SweepWalletTask sweepWalletTask;
-
+    private Unbinder unbinder;
     private final Handler handler = new MyHandler(this);
     private Listener listener;
-    private ServerClients serverClients;
+    private ServerClientController serverClients;
     private WalletAccount account;
     private SerializedKey serializedKey;
     private Error error = Error.NONE;
     private TxStatus status = TxStatus.INITIAL;
 
-    @Bind(R.id.private_key_input) View privateKeyInputView;
-    @Bind(R.id.sweep_wallet_key) EditText privateKeyText;
-    @Bind(R.id.passwordView) View passwordView;
-    @Bind(R.id.sweep_error) TextView errorΜessage;
-    @Bind(R.id.passwordInput) EditText password;
-    @Bind(R.id.sweep_loading) View sweepLoadingView;
-    @Bind(R.id.sweeping_status) TextView sweepStatus;
-    @Bind(R.id.button_next) Button nextButton;
+    @BindView(R.id.private_key_input) View privateKeyInputView;
+    @BindView(R.id.sweep_wallet_key) EditText privateKeyText;
+    @BindView(R.id.passwordView) View passwordView;
+    @BindView(R.id.sweep_error) TextView errorΜessage;
+    @BindView(R.id.passwordInput) EditText password;
+    @BindView(R.id.sweep_loading) View sweepLoadingView;
+    @BindView(R.id.sweeping_status) TextView sweepStatus;
+    @BindView(R.id.button_next) Button nextButton;
 
     public SweepWalletFragment() { }
 
@@ -135,7 +138,7 @@ public class SweepWalletFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_sweep, container, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         if (getArguments().containsKey(Constants.ARG_PRIVATE_KEY)) {
             privateKeyText.setText(getArguments().getString(Constants.ARG_PRIVATE_KEY));
@@ -147,7 +150,7 @@ public class SweepWalletFragment extends Fragment {
     @Override
     public void onSaveInstanceState(Bundle outState) {
         outState.putSerializable(STATUS, status);
-        outState.putSerializable(ERROR, error);
+        outState.putSerializable(ERROR, error);outState.putSerializable("error_msg", this.errorMsg);
     }
 
     @Override
@@ -160,7 +163,7 @@ public class SweepWalletFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        ButterKnife.unbind(this);
+        unbinder.unbind();
     }
 
     @Override
@@ -180,7 +183,7 @@ public class SweepWalletFragment extends Fragment {
                 }
             };
 
-            serverClients = new ServerClients(Constants.DEFAULT_COINS_SERVERS, connHelper);
+            serverClients = new ServerClientController(Constants.DEFAULT_COINS_SERVERS, connHelper);
         } catch (ClassCastException e) {
             throw new ClassCastException(context.toString() + " must implement " + Listener.class);
         }
@@ -238,27 +241,29 @@ public class SweepWalletFragment extends Fragment {
                 break;
             case BAD_FORMAT:
                 errorΜessage.setText(R.string.sweep_wallet_bad_format);
-                setVisible(errorΜessage);
+                UiUtils.setVisible(this.errorΜessage);
                 break;
             case BAD_COIN_TYPE:
                 errorΜessage.setText(R.string.sweep_wallet_bad_coin_type);
-                setVisible(errorΜessage);
+                UiUtils.setVisible(this.errorΜessage);
                 break;
             case BAD_PASSWORD:
                 errorΜessage.setText(R.string.sweep_wallet_bad_password);
-                setVisible(errorΜessage);
+                UiUtils.setVisible(this.errorΜessage);
                 break;
             case ZERO_COINS:
                 errorΜessage.setText(R.string.sweep_wallet_zero_coins);
-                setVisible(errorΜessage);
+                UiUtils.setVisible(this.errorΜessage);
                 break;
             case NO_CONNECTION:
                 errorΜessage.setText(R.string.disconnected_label);
-                setVisible(errorΜessage);
+                UiUtils.setVisible(this.errorΜessage);
                 break;
-            case GENERIC_ERROR:
-                errorΜessage.setText(R.string.error_generic);
-                setVisible(errorΜessage);
+            case GENERIC_ERROR:if (this.errorMsg != null) {
+                this.errorΜessage.setText(this.errorMsg);
+            } else {
+                errorΜessage.setText(R.string.error_generic);}
+                UiUtils.setVisible(this.errorΜessage);
                 break;
         }
     }
@@ -314,10 +319,31 @@ public class SweepWalletFragment extends Fragment {
     }
 
     private void onError(Error error) {
+        onError(error, null);
+    }
+
+    private void onException(Exception exception) {
+        onError(Error.GENERIC_ERROR, WalletUtils.getErrorMessage(getContext(), exception));
+    }
+
+    private void onError(Error error, String errorMsg) {
         sweepWalletTask = null;
         this.error = error;
         status = TxStatus.INITIAL;
         updateView();
+    }
+
+    private void setError(Error error) {
+        setError(error, null);
+    }
+
+    private void setError(Error error, String errorMsg) {
+        this.error = error;
+        this.errorMsg = errorMsg;
+    }
+
+    private void removeError() {
+        setError(Error.NONE, null);
     }
 
     private void maybeStartSweepTask() {
@@ -344,14 +370,14 @@ public class SweepWalletFragment extends Fragment {
 
         try {
             serializedKey = new SerializedKey(privateKey);
-            error = Error.NONE;
+            removeError();
         } catch (SerializedKey.KeyFormatException e) {
             serializedKey = null;
             if (isTyping) {
-                error = Error.NONE;
+                removeError();
             } else {
                 log.info("Invalid private key: {}", e.getMessage());
-                error = Error.BAD_FORMAT;
+                setError(Error.BAD_FORMAT);
             }
         }
 
@@ -366,11 +392,11 @@ public class SweepWalletFragment extends Fragment {
         SendRequest request = null;
         final WalletAccount sendToAccount;
         final CoinType type;
-        final ServerClients serverClients;
+        final ServerClientController serverClients;
         final SerializedKey key;
         @Nullable final String keyPassword;
 
-        public SweepWalletTask(Handler handler, ServerClients serverClients,
+        public SweepWalletTask(Handler handler, ServerClientController serverClients,
                                WalletAccount sendToAccount, SerializedKey key,
                                @Nullable String keyPassword) {
             this.handler = handler;
@@ -446,7 +472,7 @@ public class SweepWalletFragment extends Fragment {
                 this.publishProgress(TxStatus.SIGNING);
                 try {
                     request = sweepWallet
-                            .getEmptyWalletRequest(sendToAccount.getReceiveAddress());
+                            .getEmptyWalletRequest(sendToAccount.getReceiveAddress(), null);
                     request.useUnsafeOutputs = true;
                     sweepWallet.completeAndSignTx(request);
                     // Connect inputs so we can show the fees in the next screen

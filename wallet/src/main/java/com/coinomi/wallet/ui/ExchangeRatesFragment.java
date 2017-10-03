@@ -214,7 +214,7 @@ public final class ExchangeRatesFragment extends ListFragment implements OnShare
 //        balance = application.getWallet().getBalance(BalanceType.ESTIMATED);
 
         if (adapter != null && type != null) {
-            adapter.setRateBase(type.getOneCoin());
+            adapter.setRateBase(type.oneCoin());
         }
     }
 
@@ -260,13 +260,13 @@ public final class ExchangeRatesFragment extends ListFragment implements OnShare
     };
 
     private final class ExchangeRatesAdapter extends ResourceCursorAdapter {
-        private Coin rateBase = Coin.COIN;
+        private Value rateBase ;
 
         private ExchangeRatesAdapter(final Context context) {
             super(context, R.layout.exchange_rate_row, null, true);
         }
 
-        public void setRateBase(final Coin rateBase) {
+        public void setRateBase(final Value rateBase) {
             this.rateBase = rateBase;
 
             notifyDataSetChanged();
@@ -297,7 +297,7 @@ public final class ExchangeRatesFragment extends ListFragment implements OnShare
             rateAmountUnitView.setSymbol(type.getSymbol());
 
             final Amount rateAmountView = (Amount) view.findViewById(R.id.exchange_rate_row_rate);
-            Value fiatAmount = exchangeRate.rate.convert(type, rateBase);
+            Value fiatAmount = exchangeRate.rate.convert(rateBase);
             rateAmountView.setAmount(GenericUtils.formatFiatValue(fiatAmount));
             rateAmountView.setSymbol(fiatAmount.type.getSymbol());
         }

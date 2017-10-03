@@ -4,22 +4,44 @@ import com.coinomi.core.CoreUtils;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.families.BitFamily;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.protos.Protos;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.core.wallet.families.nxt.NxtFamilyWallet;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicHierarchy;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.HDKeyDerivation;
 import org.bitcoinj.crypto.KeyCrypter;
+import org.bitcoinj.crypto.KeyCrypterScrypt;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.crypto.MnemonicException;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.DeterministicSeed;
 import org.slf4j.Logger;
@@ -27,19 +49,7 @@ import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
 import org.spongycastle.util.encoders.Hex;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
-import java.security.SecureRandom;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -54,7 +64,7 @@ import static com.google.common.base.Preconditions.checkState;
 final public class Wallet {
     private static final Logger log = LoggerFactory.getLogger(Wallet.class);
     public static int ENTROPY_SIZE_DEBUG = -1;
-
+    private volatile File dbFolder;
     private final ReentrantLock lock = Threading.lock("KeyChain");
 
     @GuardedBy("lock") private final LinkedHashMap<CoinType, ArrayList<WalletAccount>> accountsByType;
@@ -123,7 +133,7 @@ final public class Wallet {
         return sb.toString();
     }
 
-    static String generateRandomId() {
+    public static String generateRandomId() {
         byte[] randomIdBytes = new byte[32];
         SecureRandom sr = new SecureRandom();
         sr.nextBytes(randomIdBytes);
@@ -131,22 +141,22 @@ final public class Wallet {
     }
 
     public WalletAccount createAccount(CoinType coin, @Nullable KeyParameter key) {
-        return createAccount(coin, false, key);
+        return createAccount(coin, false, key, null);
     }
 
     public WalletAccount createAccount(CoinType coin, boolean generateAllKeys,
-                                  @Nullable KeyParameter key) {
-        return createAccounts(Lists.newArrayList(coin), generateAllKeys, key).get(0);
+                                  @Nullable KeyParameter key,List<ChildNumber> customPath) {
+        return createAccounts(Lists.newArrayList(coin), generateAllKeys, key, customPath).get(0);
     }
 
     public List<WalletAccount> createAccounts(List<CoinType> coins, boolean generateAllKeys,
-                                  @Nullable KeyParameter key) {
+                                  @Nullable KeyParameter key, List<ChildNumber> customPath) {
         lock.lock();
         try {
             ImmutableList.Builder<WalletAccount> newAccounts = ImmutableList.builder();
             for (CoinType coin : coins) {
                 log.info("Creating coin pocket for {}", coin);
-                WalletAccount newAccount = createAndAddAccount(coin, key);
+                WalletAccount newAccount = createAndAddAccount(coin, key, customPath);
                 if (generateAllKeys) {
                     newAccount.maybeInitializeAllKeys();
                 }
@@ -251,7 +261,15 @@ final public class Wallet {
             lock.unlock();
         }
     }
-
+    public Set<CoinType> getAccountTypes() {
+        this.lock.lock();
+        try {
+            Set<CoinType> linkedHashSet = new LinkedHashSet(this.accountsByType.keySet());
+            return linkedHashSet;
+        } finally {
+            this.lock.unlock();
+        }
+    }
 
     public List getAccountIds() {
         lock.lock();
@@ -265,25 +283,30 @@ final public class Wallet {
     /**
      * Generate and add a new BIP44 account for a specific coin type
      */
-    private WalletAccount createAndAddAccount(CoinType coinType, @Nullable KeyParameter key) {
+    private WalletAccount createAndAddAccount(CoinType coinType, @Nullable KeyParameter key, List<ChildNumber> customPath) {
         checkState(lock.isHeldByCurrentThread(), "Lock is held by another thread");
         checkNotNull(coinType, "Attempting to create a pocket for a null coin");
 
         // TODO, currently we support a single account so return the existing account
-        List<WalletAccount> currentAccount = getAccounts(coinType);
+        /*List<WalletAccount> currentAccount = getAccounts(coinType);
         if (currentAccount.size() > 0) {
             return currentAccount.get(0);
-        }
+        }*/
         // TODO ///////////////
 
         DeterministicHierarchy hierarchy;
+        DeterministicKey rootKey;
         if (isEncrypted()) {
             hierarchy = new DeterministicHierarchy(masterKey.decrypt(getKeyCrypter(), key));
         } else {
             hierarchy= new DeterministicHierarchy(masterKey);
         }
         int newIndex = getLastAccountIndex(coinType) + 1;
-        DeterministicKey rootKey = hierarchy.get(coinType.getBip44Path(newIndex), false, true);
+        if (customPath == null || customPath.size() == 0) {
+            rootKey = hierarchy.get(coinType.getBip44Path(newIndex), false, true);
+        } else {
+            rootKey = hierarchy.get(customPath, false, true);
+        }
 
         WalletAccount newPocket;
 
@@ -291,6 +314,8 @@ final public class Wallet {
             newPocket = new WalletPocketHD(rootKey, coinType, getKeyCrypter(), key);
         } else if (coinType instanceof NxtFamily) {
             newPocket = new NxtFamilyWallet(rootKey, coinType, getKeyCrypter(), key);
+        } else if (coinType instanceof EthFamily) {
+            newPocket = new EthFamilyWallet(rootKey, coinType, getKeyCrypter(), key);
         } else {
             throw new UnsupportedCoinTypeException(coinType);
         }
@@ -313,7 +338,7 @@ final public class Wallet {
         for (WalletAccount account : accountsByType.get(coinType)) {
             if (account instanceof WalletPocketHD) {
                 int index = ((WalletPocketHD) account).getAccountIndex();
-                if (index > lastIndex) {
+                if (account.isStandardPath() && index > lastIndex) {
                     lastIndex = index;
                 }
             }
@@ -467,12 +492,12 @@ final public class Wallet {
     /**
      * Returns a wallet deserialized from the given file.
      */
-    public static Wallet loadFromFile(File f) throws UnreadableWalletException {
+    public static Wallet loadFromFile(File f, File dbFolder) throws UnreadableWalletException {
         try {
             FileInputStream stream = null;
             try {
                 stream = new FileInputStream(f);
-                return loadFromFileStream(stream);
+                return loadFromFileStream(stream, dbFolder);
             } finally {
                 if (stream != null) stream.close();
             }
@@ -484,8 +509,8 @@ final public class Wallet {
     /**
      * Returns a wallet deserialized from the given input stream.
      */
-    public static Wallet loadFromFileStream(InputStream stream) throws UnreadableWalletException {
-        return WalletProtobufSerializer.readWallet(stream);
+    public static Wallet loadFromFileStream(InputStream stream, File dbFolder) throws UnreadableWalletException {
+        return WalletProtobufSerializer.readWallet(stream, dbFolder);
     }
 
     /**
@@ -665,6 +690,13 @@ final public class Wallet {
         }
     }
 
+    public File getDbFolder() {
+        return this.dbFolder;
+    }
+
+    public void setDbFolder(File dbFolder) {
+        this.dbFolder = dbFolder;
+    }
     /* package */ void decrypt(KeyParameter aesKey) {
         checkNotNull(aesKey, "Attemting to decrypt with a null KeyParameter");
 
@@ -716,6 +748,84 @@ final public class Wallet {
         }
     }
 
+    public void resetEncryptionFromSeed(List<String> seedWords, String seedPassword, String newPassword) throws ResetKeyException, MnemonicException {
+        this.lock.lock();
+        try {
+            MnemonicCode.INSTANCE.check(seedWords);
+            if (seedPassword == null) {
+                seedPassword = "";
+            }
+            checkNotNull(newPassword);
+            KeyCrypterScrypt newKeyCrypter = new KeyCrypterScrypt();
+            KeyParameter newKey = newKeyCrypter.deriveKey(newPassword);
+            DeterministicSeed newSeed = new DeterministicSeed((List) seedWords, null, seedPassword, 0);
+            DeterministicKey newMasterKey = HDKeyDerivation.createMasterPrivateKey(newSeed.getSeedBytes());
+            newMasterKey.setCreationTimeSeconds(0);
+            resetEncryption(newKeyCrypter, newKey, newSeed, newMasterKey);
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    public void resetEncryptionFromPassword(CharSequence oldPassword, CharSequence newPassword) throws ResetKeyException {
+        checkNotNull(oldPassword);
+       checkNotNull(newPassword);
+        this.lock.lock();
+        try {
+            KeyCrypter oldKeyCrypter = (KeyCrypter) checkNotNull(getKeyCrypter());
+            KeyParameter oldKey = oldKeyCrypter.deriveKey(oldPassword);
+            DeterministicKey masterKeyDecrypted = this.masterKey.decrypt(oldKey);
+            DeterministicSeed seedDecrypted = this.seed != null ? this.seed.decrypt(oldKeyCrypter, oldKey) : null;
+            KeyCrypterScrypt newKeyCrypter = new KeyCrypterScrypt();
+            resetEncryption(newKeyCrypter, newKeyCrypter.deriveKey(newPassword), seedDecrypted, masterKeyDecrypted);
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    private void resetEncryption(KeyCrypter newKeyCrypter, KeyParameter newKey, DeterministicSeed newSeed, DeterministicKey newMasterKey) throws ResetKeyException {
+        checkState(this.lock.isHeldByCurrentThread(), "Lock is held by another thread");
+        if (Arrays.equals(this.masterKey.getPubKey(), newMasterKey.getPubKey())) {
+            DeterministicSeed encrypt;
+            DeterministicHierarchy hierarchy = new DeterministicHierarchy(newMasterKey);
+            HashMap<WalletAccount, DeterministicKey> accountNewKeys = new HashMap();
+            for (WalletAccount a : getAllAccounts()) {
+                if (a.hasPrivKey() || a.isEncrypted()) {
+                    accountNewKeys.put(a, hierarchy.get(a.getDeterministicRootKey().getPath(), true, true).encrypt(newKeyCrypter, newKey, null));
+                }
+            }
+            for (Entry<WalletAccount, DeterministicKey> a2 : accountNewKeys.entrySet()) {
+                ((WalletAccount) a2.getKey()).resetRootKey((DeterministicKey) a2.getValue());
+            }
+            this.masterKey = newMasterKey.encrypt(newKeyCrypter, newKey, null);
+            if (newSeed != null) {
+                encrypt = newSeed.encrypt(newKeyCrypter, newKey);
+            } else {
+                encrypt = null;
+            }
+            this.seed = encrypt;
+            saveNow();
+            return;
+        }
+        throw new ResetKeyException("New master key differs from wallet master key");
+    }
+
+    public Boolean isOwnSeed(ArrayList<String> seedWords, String seedPassword) {
+        Boolean valueOf;
+        this.lock.lock();
+        try {
+            MnemonicCode.INSTANCE.check(seedWords);
+            if (seedPassword == null) {
+                seedPassword = "";
+            }
+            valueOf = Boolean.valueOf(Arrays.equals(this.masterKey.getPubKey(), HDKeyDerivation.createMasterPrivateKey(new DeterministicSeed((List) seedWords, null, seedPassword, 0).getSeedBytes()).getPubKey()));
+        } catch (Exception e) {
+            return Boolean.valueOf(false);
+        } finally {
+            this.lock.unlock();
+        }
+        return valueOf;
+    }
     public boolean isLoading() {
         for (WalletAccount account : accounts.values()) {
             if (account.isLoading()) {

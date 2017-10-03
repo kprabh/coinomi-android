@@ -1,6 +1,6 @@
 package com.coinomi.core.wallet;
 
-
+import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.protos.Protos;
 import org.bitcoinj.core.BloomFilter;
 import org.bitcoinj.core.ECKey;
@@ -15,13 +15,13 @@ import org.bitcoinj.crypto.HDUtils;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.crypto.KeyCrypterScrypt;
-import org.bitcoinj.store.UnreadableWalletException;
+import org.bitcoinj.wallet.UnreadableWalletException;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.EncryptableKeyChain;
 import org.bitcoinj.wallet.KeyBag;
-import org.bitcoinj.wallet.KeyChainEventListener;
+import org.bitcoinj.wallet.listeners.KeyChainEventListener;
 import org.bitcoinj.wallet.RedeemData;
-
+import java.util.Arrays;
 import com.coinomi.core.util.KeyUtils;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.ByteString;
@@ -97,7 +97,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
     // We simplify by wrapping a basic key chain and that way we get some functionality like key lookup and event
     // listeners "for free". All keys in the key tree appear here, even if they aren't meant to be used for receiving
     // money.
-    private final SimpleKeyChain simpleKeyChain;
+    private  SimpleKeyChain simpleKeyChain;
 
     /**
      * Creates a deterministic key chain that watches the given (public only) root key. You can use this to calculate
@@ -120,7 +120,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
         // rest of the setup (loading the root key).
     }
 
-    SimpleHDKeyChain(DeterministicKey rootkey, @Nullable KeyCrypter crypter,
+    public SimpleHDKeyChain(DeterministicKey rootkey, @Nullable KeyCrypter crypter,
                      @Nullable KeyParameter key) {
         simpleKeyChain = new SimpleKeyChain(crypter);
         if (crypter != null && !rootkey.isEncrypted()) {
@@ -158,12 +158,17 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
             if (!isLeaf(key)) continue; // Not a leaf key.
             DeterministicKey parent = hierarchy.get(checkNotNull(key.getParent(), "Key has no parent").getPath(), false, false);
             // Clone the key to the new encrypted hierarchy.
-            key = new DeterministicKey(key.getPubOnly(), parent);
+            key = new DeterministicKey(key.dropPrivateBytes(), parent);
             hierarchy.putKey(key);
             simpleKeyChain.importKey(key);
         }
     }
-
+    private DeterministicKey pubKeyOnly(DeterministicKey key, DeterministicKey parent) {
+        DeterministicKey pubKey = new DeterministicKey(key.dropPrivateBytes(), parent);
+        this.hierarchy.putKey(pubKey);
+        this.simpleKeyChain.importKey(pubKey);
+        return pubKey;
+    }
     private DeterministicKey encryptNonLeaf(KeyParameter aesKey, SimpleHDKeyChain chain,
                                             DeterministicKey parent, ImmutableList<ChildNumber> path) {
         DeterministicKey key = chain.hierarchy.get(path, true, false);
@@ -428,7 +433,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
      * but can't spend money from it.</p>
      */
     public DeterministicKey getWatchingKey() {
-        return rootKey.getPubOnly();
+        return rootKey.dropPrivateBytes();
     }
 
     @Override
@@ -492,7 +497,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
     //
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    List<Protos.Key> toProtobuf() {
+    public List<Protos.Key> toProtobuf() {
         LinkedList<Protos.Key> entries = newLinkedList();
         List<Protos.Key.Builder> protos = toEditableProtobuf();
         for (Protos.Key.Builder proto : protos) {
@@ -660,7 +665,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
             checkState(key.isEncrypted(), "Key is not encrypted");
             DeterministicKey parent = chain.hierarchy.get(checkNotNull(key.getParent(), "Key has null parent").getPath(), false, false);
             // Clone the key to the new decrypted hierarchy.
-            key = new DeterministicKey(key.getPubOnly(), parent);
+            key = new DeterministicKey(key.dropPrivateBytes(), parent);
             chain.hierarchy.putKey(key);
             chain.simpleKeyChain.importKeys(key);
         }
@@ -834,7 +839,7 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
         int nextChild = numChildren;
         for (int i = 0; i < needed; i++) {
             DeterministicKey key = HDKeyDerivation.deriveThisOrNextChildKey(parent, nextChild);
-            key = key.getPubOnly();
+            key = key.dropPrivateBytes();
             hierarchy.putKey(key);
             result.add(key);
             nextChild = key.getChildNumber().num() + 1;
@@ -940,5 +945,51 @@ public class SimpleHDKeyChain implements EncryptableKeyChain, KeyBag {
     public int getAccountIndex() {
         return rootKey.getChildNumber().num();
     }
+
+    public boolean hasPrivKey() {
+        return this.rootKey.hasPrivKey();
 }
 
+    public void resetRootKey(DeterministicKey newRootKey) throws ResetKeyException {
+        DeterministicKey oldRoot = null;
+        SimpleKeyChain oldKeyChain = null;
+        DeterministicHierarchy oldHierarchy = null;
+        DeterministicKey oldExternalKey = null;
+        DeterministicKey oldInternalKey = null;
+        this.lock.lock();
+        try {
+            if (Arrays.equals(this.rootKey.getPubKey(), newRootKey.getPubKey())) {
+                oldRoot = this.rootKey;
+                oldKeyChain = this.simpleKeyChain;
+                oldHierarchy = this.hierarchy;
+                oldExternalKey = this.externalKey;
+                oldInternalKey = this.internalKey;
+                this.rootKey = newRootKey;
+                this.simpleKeyChain = new SimpleKeyChain(newRootKey.getKeyCrypter());
+                this.simpleKeyChain.importKey(newRootKey);
+                this.hierarchy = new DeterministicHierarchy(this.rootKey);
+                this.externalKey = pubKeyOnly(this.externalKey, newRootKey);
+                this.internalKey = pubKeyOnly(this.internalKey, newRootKey);
+                for (ECKey eckey : oldKeyChain.getKeys()) {
+                    DeterministicKey key = (DeterministicKey) eckey;
+                    if (isLeaf(key)) {
+                        this.hierarchy.putKey(new DeterministicKey(key.dropPrivateBytes(), this.hierarchy.get(((DeterministicKey) checkNotNull(key.getParent(), "Key has null parent")).getPath(), false, false)));
+                        this.simpleKeyChain.importKeys(key);
+                    }
+                }
+                this.lock.unlock();
+                return;
+            }
+            throw new ResetKeyException("Provided key does not match the current root key");
+        } catch (Throwable e) {
+            this.rootKey = oldRoot;
+            this.simpleKeyChain = oldKeyChain;
+            this.hierarchy = oldHierarchy;
+            this.externalKey = oldExternalKey;
+            this.internalKey = oldInternalKey;
+            throw new ResetKeyException(e);
+        } finally {
+            this.lock.unlock();
+        }
+    }
+}

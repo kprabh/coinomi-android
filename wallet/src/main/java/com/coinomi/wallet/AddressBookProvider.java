@@ -49,6 +49,8 @@ public class AddressBookProvider extends ContentProvider {
     public static final String SELECTION_IN = "in";
     public static final String SELECTION_NOTIN = "notin";
 
+
+
     public static Uri contentUri(@Nonnull final String packageName) {
         return contentUri(packageName, "");
     }

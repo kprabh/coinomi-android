@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
 
@@ -51,30 +52,31 @@ public class StratumClient extends AbstractExecutionThreadService {
     final private ConcurrentHashMap<String, List<SubscribeResultHandler>> subscribersHandlers =
             new ConcurrentHashMap<>();
 
-    final private BlockingQueue<BaseMessage> queue = new LinkedBlockingDeque<BaseMessage>();
+    private final BlockingQueue<BaseMessage> receiveQueue = new LinkedBlockingQueue();
+    private final BlockingQueue<String> sendQueue = new LinkedBlockingQueue();
 
 
     public interface SubscribeResultHandler {
         void handle(CallMessage message);
     }
 
-    private class MessageHandler implements Runnable {
+    private class ReceiveMessageHandler implements Runnable {
         @Override
         public void run() {
             while (!pool.isShutdown()) {
                 BaseMessage message = null;
                 try {
-                    message = queue.take();
+                    message = receiveQueue.take();
                 } catch (InterruptedException ignored) { }
 
                 if (message != null) {
-                    handle(message);
+                    handleReceiveMessage(message);
                 }
             }
             log.info("Shutdown message handler thread: {}", Thread.currentThread().getName());
         }
 
-        private void handle(BaseMessage message) {
+        private void handleReceiveMessage(BaseMessage message) {
             if (message instanceof ResultMessage) {
                 ResultMessage reply = (ResultMessage) message;
                 if (callers.containsKey(reply.getId())) {
@@ -114,7 +116,42 @@ public class StratumClient extends AbstractExecutionThreadService {
             }
         }
     }
+    private class SendMessageHandler implements Runnable {
+        @Override
+        public void run() {
+            while (!pool.isShutdown()) {
+                String message = null;
+                try {
+                    message = sendQueue.take();
+                } catch (InterruptedException ignored) { }
 
+                if (message != null) {
+                    handleSendMessage(message);
+                }
+            }
+            log.info("Shutdown message handler thread: {}", Thread.currentThread().getName());
+        }
+
+        private void handleSendMessage(String message) {
+            try {
+                StratumClient.this.toServer.writeBytes(message);
+            } catch (Throwable e) {
+                try {
+                    long id = BaseMessage.fromJson(message).getId();
+                    if (StratumClient.this.callers.containsKey(Long.valueOf(id))) {
+                        ((SettableFuture) StratumClient.this.callers.get(Long.valueOf(id))).setException(e);
+                        StratumClient.this.callers.remove(Long.valueOf(id));
+                    } else {
+                        StratumClient.log.error("Error sending message, but could not find caller", new MessageException("Orphaned reply", message));
+                    }
+                } catch (JSONException e1) {
+                    e1.printStackTrace();
+                }
+                StratumClient.log.error("Error making a call to the server: {}", e.getMessage());
+                StratumClient.this.triggerShutdown();
+            }
+        }
+    }
     public StratumClient(ServerAddress address) {
         serverAddress = address;
     }
@@ -137,7 +174,7 @@ public class StratumClient extends AbstractExecutionThreadService {
     @Override
     protected void startUp() {
         for (int i = 0; i < NUM_OF_WORKERS; i++) {
-            pool.submit(new MessageHandler());
+            pool.submit(new ReceiveMessageHandler());
         }
         try {
             socket = createSocket();
@@ -196,14 +233,14 @@ public class StratumClient extends AbstractExecutionThreadService {
 
             if (reply.errorOccured()) {
                 Exception e = new MessageException(reply.getError(), reply.getFailedRequest());
-                log.error("Failed call", e);
+
                 // TODO set exception to the correct future object
-//                if (callers.containsKey()) {
-//                    SettableFuture<ResultMessage> future = callers.get();
-//                    future.setException(e);
-//                } else {
-//                    log.error("Failed orphaned call", e);
-//                }
+                if (callers.containsKey(reply.getId())) {
+                    SettableFuture<ResultMessage> future = callers.get(reply.getId());
+                    future.setException(e);
+                } else {
+                   log.error("Failed orphaned call", e);
+               }
             } else {
                 boolean added = false;
 
@@ -220,7 +257,7 @@ public class StratumClient extends AbstractExecutionThreadService {
 
                 while (!added) {
                     try {
-                        queue.put(reply);
+                        receiveQueue.put(reply);
                         added = true;
                     } catch (InterruptedException e) {
                         log.debug("Interrupted while adding server reply to queue. Retrying...");
@@ -245,19 +282,23 @@ public class StratumClient extends AbstractExecutionThreadService {
                 log.error("Unable to close socket", e);
             }
         }
+        this.socket = null;
+        this.toServer = null;
+        this.fromServer = null;
     }
 
     public ListenableFuture<ResultMessage> call(CallMessage message) {
         SettableFuture<ResultMessage> future = SettableFuture.create();
 
         message.setId(idCounter.getAndIncrement());
-
+        long id = message.getId();
+        callers.put(Long.valueOf(message.getId()), future);
         try {
-            toServer.writeBytes(message.toString());
-            callers.put(message.getId(), future);
-        } catch (Throwable e) {
-            future.setException(e);
+            this.sendQueue.add(message.toString());
+        } catch (IllegalStateException e) {
             log.error("Error making a call to the server: {}", e.getMessage());
+            this.callers.remove(Long.valueOf(id));
+            future.setException(e);
             triggerShutdown();
         }
 

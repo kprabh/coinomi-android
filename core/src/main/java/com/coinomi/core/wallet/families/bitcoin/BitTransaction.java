@@ -7,7 +7,6 @@ import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractWallet;
-import com.coinomi.core.wallet.TransactionWatcherWallet;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.Sha256Hash;
@@ -45,9 +44,9 @@ public final class BitTransaction implements AbstractTransaction {
     final Value valueReceived;
     final Value value;
     @Nullable final Value fee;
-
+    final boolean isGenerated;
     public BitTransaction(Sha256Hash transactionId, Transaction transaction, boolean isTrimmed,
-                          Value valueSent, Value valueReceived, @Nullable Value fee) {
+                          Value valueSent, Value valueReceived, @Nullable Value fee, boolean isGenerated) {
         tx = checkNotNull(transaction);
         type = (CoinType) tx.getParams();
         this.isTrimmed = isTrimmed;
@@ -63,11 +62,11 @@ public final class BitTransaction implements AbstractTransaction {
             this.valueReceived = null;
             this.value = null;
             this.fee = null;
-        }
+        }this.isGenerated = isGenerated;
     }
 
     public BitTransaction(Transaction transaction) {
-        this(checkNotNull(transaction).getHash(), transaction, false, null, null, null);
+        this(checkNotNull(transaction).getHash(), transaction, false, null, null, null, false);
     }
 
     public BitTransaction(CoinType type, byte[] rawTx) {
@@ -75,8 +74,8 @@ public final class BitTransaction implements AbstractTransaction {
     }
 
     public static BitTransaction fromTrimmed(Sha256Hash transactionId, Transaction transaction,
-                                             Value valueSent, Value valueReceived, Value fee) {
-        return new BitTransaction(transactionId, transaction, true, valueSent, valueReceived, fee);
+                                             Value valueSent, Value valueReceived, Value fee, boolean isGenerated) {
+        return new BitTransaction(transactionId, transaction, true, valueSent, valueReceived, fee, isGenerated);
     }
 
     @Override
@@ -160,7 +159,6 @@ public final class BitTransaction implements AbstractTransaction {
         if (isTrimmed) {
             return getValueSent();
         } else {
-            tx.ensureParsed();
             // Find the value of the inputs that draw value from the wallet
             Value sent = type.value(0);
             Map<Sha256Hash, BitTransaction> transactions = wallet.getTransactions();
@@ -269,7 +267,9 @@ public final class BitTransaction implements AbstractTransaction {
     }
 
     @Override
-    public boolean isGenerated() {
+    public boolean isGenerated() {if (this.isTrimmed) {
+        return this.isGenerated;
+    }
         return tx.isCoinBase() || tx.isCoinStake();
     }
 
@@ -330,7 +330,49 @@ public final class BitTransaction implements AbstractTransaction {
         checkState(!isTrimmed, "Cannot serialize a trimmed transaction");
         return tx.bitcoinSerialize();
     }
-
+    public BitTransaction toTrimmed(TransactionWatcherWallet wallet) {
+        if (this.isTrimmed) {
+            return this;
+        }
+        Value sent = getValueSent(wallet);
+        Value received = getValueReceived(wallet);
+        boolean isReceiving = received.compareTo(sent) > 0;
+        Value fee = isReceiving ? null : getRawTxFee(wallet);
+        List<TransactionOutput> outputs = this.tx.getOutputs();
+        boolean isGenerated = isGenerated();
+        TrimmedTransaction trimmed = new TrimmedTransaction(this.type, getHash(), outputs.size());
+        TransactionConfidence fullTxConf = this.tx.getConfidence();
+        TransactionConfidence txConf = trimmed.getConfidence();
+        txConf.setSource(fullTxConf.getSource());
+        txConf.setConfidenceType(fullTxConf.getConfidenceType());
+        if (txConf.getConfidenceType() == TransactionConfidence.ConfidenceType.BUILDING) {
+            txConf.setAppearedAtChainHeight(fullTxConf.getAppearedAtChainHeight());
+            txConf.setDepthInBlocks(fullTxConf.getDepthInBlocks());
+        }
+        trimmed.setTime(this.tx.getTime());
+        trimmed.setTokenId(this.tx.getTokenId());
+        trimmed.setExtraBytes(this.tx.getExtraBytes());
+        trimmed.setUpdateTime(this.tx.getUpdateTime());
+        trimmed.setLockTime(this.tx.getLockTime());
+        if (this.tx.getAppearsInHashes() != null) {
+            for (Map.Entry<Sha256Hash, Integer> appears : this.tx.getAppearsInHashes().entrySet()) {
+                trimmed.addBlockAppearance((Sha256Hash) appears.getKey(), ((Integer) appears.getValue()).intValue());
+            }
+        }
+        trimmed.setPurpose(this.tx.getPurpose());
+        if (isReceiving) {
+            int outputIndex = 0;
+            for (TransactionOutput output : outputs) {
+                if (output.isMineOrWatched(wallet)) {
+                    trimmed.addOutput(outputIndex, output);
+                }
+                outputIndex++;
+            }
+        } else {
+            trimmed.addAllOutputs(outputs);
+        }
+        return fromTrimmed(getHash(), trimmed, sent, received, fee, isGenerated);
+    }
     private BitTransaction getTrimTransaction(TransactionBag wallet) {
         throw new RuntimeException();
 //        BitTransaction transaction = rawTransactions.get(hash);

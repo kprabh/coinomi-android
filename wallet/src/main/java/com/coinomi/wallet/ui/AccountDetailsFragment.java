@@ -16,6 +16,9 @@ import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.util.QrUtils;
 import com.coinomi.wallet.util.UiUtils;
+import com.google.common.collect.ImmutableList;
+
+import org.bitcoinj.crypto.HDUtils;
 
 import static com.coinomi.core.Preconditions.checkNotNull;
 
@@ -23,6 +26,7 @@ import static com.coinomi.core.Preconditions.checkNotNull;
  * @author John L. Jegutanis
  */
 public class AccountDetailsFragment extends Fragment {
+    private String derivationPath;
     private String publicKeySerialized;
 
     public static AccountDetailsFragment newInstance(WalletAccount account) {
@@ -49,7 +53,10 @@ public class AccountDetailsFragment extends Fragment {
             return;
         }
 
-        publicKeySerialized = account.getPublicKeySerialized();
+        publicKeySerialized = account.getPublicKeySerialized();ImmutableList derivationPath = account.getDeterministicRootKeyPath();
+        if (!derivationPath.isEmpty()) {
+            this.derivationPath = HDUtils.formatPath(derivationPath);
+        }
     }
 
     @Override
@@ -60,7 +67,13 @@ public class AccountDetailsFragment extends Fragment {
         TextView publicKey = (TextView) view.findViewById(R.id.public_key);
         publicKey.setOnClickListener(getPubKeyOnClickListener());
         publicKey.setText(publicKeySerialized);
-
+        TextView derivationPathView = (TextView) view.findViewById(R.id.derivation_path);
+        if (this.derivationPath != null) {
+            derivationPathView.setText(this.derivationPath);
+        } else {
+            derivationPathView.setVisibility(View.GONE);
+            view.findViewById(R.id.derivation_path_label).setVisibility(View.GONE);
+        }
         ImageView qrView = (ImageView) view.findViewById(R.id.qr_code_public_key);
         QrUtils.setQr(qrView, getResources(), publicKeySerialized);
 

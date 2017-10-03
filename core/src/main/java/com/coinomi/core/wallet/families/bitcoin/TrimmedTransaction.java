@@ -1,5 +1,6 @@
 package com.coinomi.core.wallet.families.bitcoin;
 
+import com.coinomi.core.coins.CoinType;
 import com.google.common.collect.ImmutableList;
 
 import org.bitcoinj.core.NetworkParameters;
@@ -78,7 +79,7 @@ public class TrimmedTransaction extends Transaction {
         return numberOfOutputs;
     }
 
-    @Override
+
     public TransactionOutput getOutput(int index) {
         checkIndex(index);
 
@@ -88,7 +89,7 @@ public class TrimmedTransaction extends Transaction {
             TransactionOutput output = trimmedOutputs.get(index);
             // Trimmed outputs are empty
             if (output == null) {
-                return EmptyTransactionOutput.get();
+                return EmptyTransactionOutput.get((CoinType)getParams());
             } else {
                 return output;
             }
@@ -111,7 +112,7 @@ public class TrimmedTransaction extends Transaction {
             return super.getOutputs();
         } else {
             ImmutableList.Builder<TransactionOutput> listBuilder = ImmutableList.builder();
-            TransactionOutput emptyOutput = EmptyTransactionOutput.get();
+            TransactionOutput emptyOutput = EmptyTransactionOutput.get((CoinType)getParams());
             for (int i = 0; i < numberOfOutputs; i++) {
                 TransactionOutput output = trimmedOutputs.get(i);
                 // Trimmed outputs are empty

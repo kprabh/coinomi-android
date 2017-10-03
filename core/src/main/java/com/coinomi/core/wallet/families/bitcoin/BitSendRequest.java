@@ -8,14 +8,27 @@ import com.coinomi.core.wallet.SendRequest;
 
 import org.bitcoinj.core.Coin;
 import org.bitcoinj.core.Transaction;
+import org.bitcoinj.core.Address;
 
 import static com.coinomi.core.Preconditions.checkState;
 import static com.google.common.base.Preconditions.checkNotNull;
+import java.util.Iterator;
 
 /**
  * @author John L. Jegutanis
  */
-public class BitSendRequest extends SendRequest<BitTransaction> {
+public class BitSendRequest extends SendRequest<BitTransaction, BitAddress> {
+    @Override
+    protected void resetImpl() {
+        Transaction tx = new Transaction(this.type);
+        Iterator it = this.destinations.iterator();
+        while (it.hasNext()) {
+            Destination<BitAddress> destination = (Destination) it.next();
+            tx.addOutput(destination.amount.toCoin(), (Address) destination.to);
+        }
+        setTransaction(new BitTransaction(tx));
+    }
+
     public BitSendRequest(CoinType type) {
         super(type);
     }
@@ -47,9 +60,8 @@ public class BitSendRequest extends SendRequest<BitTransaction> {
 
         BitSendRequest req = new BitSendRequest(destination.getType());
 
-        Transaction tx = new Transaction(req.type);
-        tx.addOutput(Coin.ZERO, destination);
-        req.tx = new BitTransaction(tx);
+        req.destinations.add(new Destination(destination, destination.getType().zeroCoin()));
+        req.reset();
         req.emptyWallet = true;
 
         return req;

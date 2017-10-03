@@ -18,6 +18,7 @@ package com.coinomi.core.wallet;
 
 
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.FeePolicy;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.wallet.families.bitcoin.CoinSelector;
@@ -25,10 +26,11 @@ import com.google.common.base.Objects;
 import com.google.common.base.Objects.ToStringHelper;
 
 import org.bitcoinj.core.Transaction;
-import org.bitcoinj.core.Wallet.MissingSigsMode;
+import org.bitcoinj.wallet.Wallet.MissingSigsMode;
 import org.spongycastle.crypto.params.KeyParameter;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 
 /**
  * A SendRequest gives the wallet information about precisely how to send money to a recipient or set of recipients.
@@ -36,8 +38,86 @@ import java.io.Serializable;
  * just simplify the most common use cases. You may wish to customize a SendRequest if you want to attach a fee or
  * modify the change address.
  */
-public class SendRequest<T extends AbstractTransaction> implements Serializable {
+public abstract class SendRequest<T extends AbstractTransaction, A extends AbstractAddress> implements Serializable {
 
+    protected ArrayList<Destination<A>> destinations = new ArrayList();
+
+    public static class Destination<A> {
+        public final Value amount;
+        public final A to;
+
+        public Destination(A address, Value value) {
+            this.to = address;
+            this.amount = value;
+        }
+    }
+
+    protected abstract void resetImpl();
+
+    public void setFeePerTxSize(Value newFee) {
+        FeePolicy feePolicy = this.type.getFeePolicy();
+        if (newFee.isNegative()) {
+            newFee = this.type.getFeeValue();
+        }
+        switch (feePolicy) {
+            case FLAT_FEE:
+                this.feePerTxSize = this.type.zeroCoin();
+                this.fee = newFee;
+                return;
+            case FEE_PER_KB:
+            case FEE_PER_KB_APPLY_PER_BYTE:
+            case FEE_GAS_PRICE:
+                this.feePerTxSize = newFee;
+                this.fee = this.type.zeroCoin();
+                return;
+            default:
+                throw new RuntimeException("Unknown fee policy: " + this.type.getFeePolicy());
+        }
+    }
+
+
+    public void setTransaction(T transaction) {
+        this.tx = transaction;
+    }
+
+    public T getTx() {
+        return getTx(false);
+    }
+
+    public T getTx(boolean allowIncomplete) {
+        if (allowIncomplete || isCompleted()) {
+            return this.tx;
+        }
+        return null;
+    }
+
+    public boolean isEmptyWallet() {
+        return this.emptyWallet;
+    }
+
+    public void reset() {
+        resetImpl();
+        this.completed = false;
+    }
+
+    protected SendRequest(CoinType type) {
+        this.type = type;
+        switch (type.getFeePolicy()) {
+            case FLAT_FEE:
+                this.feePerTxSize = type.value(0);
+                this.fee = type.getFeeValue();
+                return;
+            case FEE_PER_KB:
+            case FEE_PER_KB_APPLY_PER_BYTE:
+            case FEE_GAS_PRICE:
+                this.feePerTxSize = type.getFeeValue();
+                this.fee = type.zeroCoin();
+                return;
+            default:
+                throw new RuntimeException("Unknown fee policy: " + type.getFeePolicy());
+        }
+    }
+    //TODO
     /**
      * The blockchain network (Bitcoin, Dogecoin,..) that this request is going to transact
      */
@@ -52,7 +132,7 @@ public class SendRequest<T extends AbstractTransaction> implements Serializable 
 
     /**
      * When emptyWallet is set, all coins selected by the coin selector are sent to the first output in tx
-     * (its value is ignored and set to {@link org.bitcoinj.core.Wallet#getBalance()} - the fees required
+     * (its value is ignored and set to {@link org.bitcoinj.wallet.Wallet#getBalance()} - the fees required
      * for the transaction). Any additional outputs are removed.
      */
     public boolean emptyWallet = false;
@@ -168,21 +248,6 @@ public class SendRequest<T extends AbstractTransaction> implements Serializable 
     // Tracks if this has been passed to wallet.completeTransaction already: just a safety check.
     private boolean completed;
 
-    protected SendRequest(CoinType type) {
-        this.type = type;
-        switch (type.getFeePolicy()) {
-            case FLAT_FEE:
-                feePerTxSize = type.value(0);
-                fee = type.getFeeValue();
-                break;
-            case FEE_PER_KB:
-                feePerTxSize = type.getFeeValue();
-                fee = type.value(0);
-                break;
-            default:
-                throw new RuntimeException("Unknown fee policy: " + type.getFeePolicy());
-        }
-    }
 
     @Override
     public String toString() {

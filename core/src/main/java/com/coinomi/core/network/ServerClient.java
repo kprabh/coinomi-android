@@ -1,7 +1,9 @@
 package com.coinomi.core.network;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.exceptions.AddressMalformedException;
+import com.coinomi.core.network.interfaces.BlockchainConnection;
 import com.coinomi.core.network.interfaces.ConnectionEventListener;
 import com.coinomi.core.network.interfaces.TransactionEventListener;
 import com.coinomi.core.wallet.AbstractAddress;
@@ -9,6 +11,7 @@ import com.coinomi.core.wallet.families.bitcoin.BitAddress;
 import com.coinomi.core.wallet.families.bitcoin.BitBlockchainConnection;
 import com.coinomi.core.wallet.families.bitcoin.BitTransaction;
 import com.coinomi.core.wallet.families.bitcoin.BitTransactionEventListener;
+import com.coinomi.core.wallet.families.bitcoin.TxFeeEventListener;
 import com.coinomi.stratumj.ServerAddress;
 import com.coinomi.stratumj.StratumClient;
 import com.coinomi.stratumj.messages.CallMessage;
@@ -52,7 +55,7 @@ import static com.google.common.util.concurrent.Service.State.NEW;
 /**
  * @author John L. Jegutanis
  */
-public class ServerClient implements BitBlockchainConnection {
+public final class ServerClient extends ServerClientBase implements BitBlockchainConnection {
     private static final Logger log = LoggerFactory.getLogger(ServerClient.class);
 
     private static final ScheduledThreadPoolExecutor connectionExec;
@@ -67,11 +70,9 @@ public class ServerClient implements BitBlockchainConnection {
 
     private static final long MAX_WAIT = 16;
     private static final long CONNECTION_STABILIZATION = 30;
-    private final ConnectivityHelper connectivityHelper;
+
 
     private CoinType type;
-    private final ImmutableList<ServerAddress> addresses;
-    private final HashSet<ServerAddress> failedAddresses;
     private ServerAddress lastServerAddress;
     private StratumClient stratumClient;
     private long retrySeconds = 0;
@@ -84,12 +85,14 @@ public class ServerClient implements BitBlockchainConnection {
     // TODO, only one is supported at the moment. Change when accounts are supported.
     private transient CopyOnWriteArrayList<ListenerRegistration<ConnectionEventListener>> eventListeners;
 
+
+
     private void reschedule(Runnable r, long delay, TimeUnit unit) {
         connectionExec.remove(r);
         connectionExec.schedule(r, delay, unit);
     }
 
-    private Runnable reconnectTask = new Runnable() {
+   /* private Runnable reconnectTask = new Runnable() {
         @Override
         public void run() {
             if (!stopped) {
@@ -109,7 +112,7 @@ public class ServerClient implements BitBlockchainConnection {
                 log.info("{} client stopped, aborting reconnect.", type.getName());
             }
         }
-    };
+    };*/
 
     private Runnable connectionCheckTask = new Runnable() {
         @Override
@@ -125,48 +128,51 @@ public class ServerClient implements BitBlockchainConnection {
         @Override
         public void running() {
             // Check if connection is up as this event is fired even if there is no connection
-            if (isActivelyConnected()) {
-                log.info("{} client connected to {}", type.getName(), lastServerAddress);
-                broadcastOnConnection();
-
-                // Test that the connection is stable
-                reschedule(connectionCheckTask, CONNECTION_STABILIZATION, TimeUnit.SECONDS);
-            }
+            ServerClient.this.onNetworkClientConnected();
         }
 
         @Override
         public void terminated(Service.State from) {
-            log.info("{} client stopped", type.getName());
-            broadcastOnDisconnect();
-            failedAddresses.add(lastServerAddress);
-            lastServerAddress = null;
-            stratumClient = null;
-            // Try to restart
-            if (!stopped) {
-                log.info("Reconnecting {} in {} seconds", type.getName(), retrySeconds);
-                connectionExec.remove(connectionCheckTask);
-                connectionExec.remove(reconnectTask);
-                if (retrySeconds > 0) {
-                    reconnectAt = System.currentTimeMillis() + retrySeconds * 1000;
-                    connectionExec.schedule(reconnectTask, retrySeconds, TimeUnit.SECONDS);
-                } else {
-                    connectionExec.execute(reconnectTask);
-                }
-            }
+            ServerClient.this.onNetworkClientDisconnected();
         }
     };
 
-    public ServerClient(CoinAddress coinAddress, ConnectivityHelper connectivityHelper) {
-        this.connectivityHelper = connectivityHelper;
-        eventListeners = new CopyOnWriteArrayList<ListenerRegistration<ConnectionEventListener>>();
-        failedAddresses = new HashSet<ServerAddress>();
-        type = coinAddress.getType();
-        addresses = ImmutableList.copyOf(coinAddress.getAddresses());
-
-        createStratumClient();
+    public ServerClient(CoinAddress coinAddress, ConnectivityHelper connectivityHelper){
+        super(coinAddress, connectivityHelper);
+    }    protected void setupNetworkClient(ServerAddress address) {
+        checkState(this.stratumClient == null);
+        this.stratumClient = new StratumClient(address);
+        this.stratumClient.addListener(this.serviceListener, Threading.USER_THREAD);
     }
 
-    private StratumClient createStratumClient() {
+    protected boolean isNetworkClientAvailable() {
+        return this.stratumClient != null;
+    }
+
+    protected void startNetworkClientAsync() {
+        if (this.stratumClient.state() != Service.State.NEW) {
+            log.debug("Not starting network client as it is already started");
+            return;
+        }
+        try {
+            this.stratumClient.startAsync();
+        } catch (Throwable e) {
+            log.warn("Unable to start Service " + this.type.getName(), e);
+        }
+    }
+
+    protected void deleteNetworkClient() {
+        if (this.stratumClient != null) {
+            this.stratumClient.stopAsync();
+        }
+        this.stratumClient = null;
+    }
+
+    protected BlockchainConnection getThisBlockchainConnection() {
+        return this;
+    }
+
+   /* private StratumClient createStratumClient() {
         checkState(stratumClient == null);
         lastServerAddress = getServerAddress();
         stratumClient = new StratumClient(lastServerAddress);
@@ -224,7 +230,7 @@ public class ServerClient implements BitBlockchainConnection {
             stratumClient.stopAsync();
             stratumClient = null;
         }
-    }
+    }*/
 
     public boolean isActivelyConnected() {
         return stratumClient != null && stratumClient.isConnected() && stratumClient.isRunning();
@@ -456,7 +462,17 @@ public class ServerClient implements BitBlockchainConnection {
             }
         }, Threading.USER_THREAD);
     }
+    public void estimateFee(int blocks, final TxFeeEventListener listener) {
+        Futures.addCallback(this.stratumClient.call(new CallMessage("blockchain.estimatefee", blocks)), new FutureCallback<ResultMessage>() {
+            public void onSuccess(ResultMessage result) {
+                listener.onFeeEstimate(ServerClient.this.type.value(result.getResult().optDouble(0, -1.0d)));
+            }
 
+            public void onFailure(Throwable t) {
+                ServerClient.log.error("Could not get reply for blockchain.estimatefee", t);
+            }
+        }, Threading.USER_THREAD);
+    }
     @Override
     public void getHistoryTx(final AddressStatus status,
                              final TransactionEventListener<BitTransaction> listener) {

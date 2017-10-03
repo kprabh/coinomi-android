@@ -7,11 +7,15 @@ import android.widget.BaseAdapter;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.wallet.Wallet;
 import com.coinomi.wallet.Configuration;
+import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.ui.widget.CoinListItem;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * @author John L. Jegutanis
@@ -20,17 +24,20 @@ public class FeesListAdapter extends BaseAdapter {
     private final Context context;
     private final Configuration config;
     private List<Value> fees;
+    private final Wallet wallet;
 
-    public FeesListAdapter(final Context context, Configuration config) {
+    public FeesListAdapter(final Context context, Configuration config, Wallet wallet) {
         this.context = context;
         this.config = config;
         this.fees = new ArrayList<>();
+        this.wallet = wallet;
         update();
     }
 
     public void update() {
+        Set<CoinType> types = new HashSet<CoinType>(this.wallet != null ? this.wallet.getAccountTypes() : Constants.SUPPORTED_COINS);
         fees.clear();
-        fees.addAll(config.getFeeValues().values());
+        fees.addAll(config.getFeeValues(types).values());
         notifyDataSetChanged();
     }
 

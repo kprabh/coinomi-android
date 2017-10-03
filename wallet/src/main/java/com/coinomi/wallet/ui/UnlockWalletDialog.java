@@ -66,7 +66,10 @@ public class UnlockWalletDialog extends DialogFragment {
     DialogInterface.OnClickListener dismissListener = new DialogInterface.OnClickListener() {
         @Override
         public void onClick(DialogInterface dialog, int which) {
-            dismissAllowingStateLoss();
+            if (UnlockWalletDialog.this.listener != null) {
+                UnlockWalletDialog.this.listener.onPassword(UnlockWalletDialog.this.passwordView.getText());
+            }
+            UnlockWalletDialog.this.dismissAllowingStateLoss();
         }
     };
 

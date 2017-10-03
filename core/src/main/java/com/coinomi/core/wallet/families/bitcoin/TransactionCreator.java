@@ -1,12 +1,9 @@
-package com.coinomi.core.wallet;
+package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.FeePolicy;
+import com.coinomi.core.coins.SoftDustPolicy;
 import com.coinomi.core.coins.Value;
-import com.coinomi.core.wallet.families.bitcoin.BitSendRequest;
-import com.coinomi.core.wallet.families.bitcoin.CoinSelection;
-import com.coinomi.core.wallet.families.bitcoin.CoinSelector;
-import com.coinomi.core.wallet.families.bitcoin.OutPointOutput;
 import com.google.common.collect.Lists;
 
 import org.bitcoinj.core.Address;
@@ -48,16 +45,18 @@ public class TransactionCreator {
     private final CoinType coinType;
     private final Coin minNonDust;
     private final Coin softDustLimit;
-
+    private final SoftDustPolicy softDustPolicy;
+    private final FeePolicy feePolicy;
     private final CoinSelector coinSelector = new WalletCoinSelector();
     private final ReentrantLock lock; // TODO remove
-
+    private final Value minFee;
     public TransactionCreator(TransactionWatcherWallet account) {
         this.account = account;
-        lock = account.lock;
-        coinType = account.type;
+        lock = account.getLock();
+        coinType = account.getCoinType();
         minNonDust = coinType.getMinNonDust().toCoin();
-        softDustLimit = coinType.getSoftDustLimit().toCoin();
+        softDustLimit = coinType.getSoftDustLimit().toCoin();feePolicy =   coinType.getFeePolicy();
+        this.softDustPolicy = this.coinType.getSoftDustPolicy();minFee = this.coinType.getMinFeeValue();
     }
 
     private static class FeeCalculation {
@@ -109,7 +108,7 @@ public class TransactionCreator {
                 for (TransactionOutput output : tx.getOutputs())
                     if (output.getValue().compareTo(softDustLimit) < 0) {
                         if (output.getValue().compareTo(minNonDust) < 0)
-                            throw new org.bitcoinj.core.Wallet.DustySendRequested();
+                            throw new org.bitcoinj.wallet.Wallet.DustySendRequested();
                         numberOfSoftDustOutputs++;
                     }
             }
@@ -148,7 +147,7 @@ public class TransactionCreator {
                 final Value baseFee = req.fee == null ? Value.valueOf(account.getCoinType(), Coin.ZERO) : req.fee;
                 final Value feePerTxSize = req.feePerTxSize == null ? Value.valueOf(account.getCoinType(), Coin.ZERO) : req.feePerTxSize;
                 if (!adjustOutputDownwardsForFee(tx, bestCoinSelection, baseFee.toCoin(), feePerTxSize.toCoin()))
-                    throw new org.bitcoinj.core.Wallet.CouldNotAdjustDownwards();
+                    throw new org.bitcoinj.wallet.Wallet.CouldNotAdjustDownwards();
             }
 
             if (bestChangeOutput != null) {
@@ -168,7 +167,7 @@ public class TransactionCreator {
             // Check size.
             int size = tx.bitcoinSerialize().length;
             if (size > Transaction.MAX_STANDARD_TX_SIZE)
-                throw new org.bitcoinj.core.Wallet.ExceededMaxTransactionSize();
+                throw new org.bitcoinj.wallet.Wallet.ExceededMaxTransactionSize();
 
             final Value calculatedFee = req.tx.getFee();
             if (calculatedFee != null) {
@@ -291,10 +290,12 @@ public class TransactionCreator {
         while (true) {
             resetTxInputs(tx, originalInputs);
 
-            Value fees = req.fee == null ? Value.valueOf(account.getCoinType(), Coin.ZERO) : req.fee;
-            if (lastCalculatedSize > 0 && coinType.getFeePolicy() == FeePolicy.FEE_PER_KB) {
+            Value fees = req.fee == null ? this.coinType.zeroCoin() : req.fee;;
+            if (lastCalculatedSize > 0 && this.feePolicy == FeePolicy.FEE_PER_KB) {
                 // If the size is exactly 1000 bytes then we'll over-pay, but this should be rare.
                 fees = fees.add(req.feePerTxSize.multiply((lastCalculatedSize / 1000) + 1));
+            } else if (lastCalculatedSize > 0 && this.feePolicy == FeePolicy.FEE_PER_KB_APPLY_PER_BYTE) {
+                fees = fees.add(req.feePerTxSize.divide(1000).multiply((long) lastCalculatedSize));
             } else {
                 fees = fees.add(req.feePerTxSize);  // First time around the loop.
             }
@@ -349,14 +350,14 @@ public class TransactionCreator {
             if (req.ensureMinRequiredFee && !change.equals(Coin.ZERO) &&
                     change.compareTo(softDustLimit) < 0) {
 
-                switch (coinType.getSoftDustPolicy()) {
+                switch (softDustPolicy) {
                     case AT_LEAST_BASE_FEE_IF_SOFT_DUST_TXO_PRESENT:
-                        if (fees.compareTo(req.feePerTxSize) < 0) {
+                        if (fees.compareTo(minFee) < 0) {
                             // This solution may fit into category 2, but it may also be category 3, we'll check that later
                             eitherCategory2Or3 = true;
                             additionalValueForNextCategory = softDustLimit;
                             // If the change is smaller than the fee we want to add, this will be negative
-                            change = change.subtract(req.feePerTxSize.subtract(fees).toCoin());
+                            change = change.subtract(minFee.subtract(fees).toCoin());
                         }
                         break;
                     case BASE_FEE_FOR_EACH_SOFT_DUST_TXO:
@@ -364,12 +365,12 @@ public class TransactionCreator {
                         eitherCategory2Or3 = true;
                         additionalValueForNextCategory = softDustLimit;
                         // If the change is smaller than the fee we want to add, this will be negative
-                        change = change.subtract(req.feePerTxSize.toCoin());
+                        change = change.subtract(minFee.toCoin());
                         break;
                     case NO_POLICY:
                         break;
                     default:
-                        throw new RuntimeException("Unknown soft dust policy: " + coinType.getSoftDustPolicy());
+                        throw new RuntimeException("Unsupported soft dust policy: " + coinType.getSoftDustPolicy());
                 }
             }
 
@@ -414,13 +415,7 @@ public class TransactionCreator {
             // include things we haven't added yet like input signatures/scripts or the change output.
             size += tx.bitcoinSerialize().length;
             size += estimateBytesForSigning(selection);
-            if (size / 1000 > lastCalculatedSize / 1000 && req.feePerTxSize.signum() > 0) {
-                lastCalculatedSize = size;
-                // We need more fees anyway, just try again with the same additional value
-                additionalValueForNextCategory = additionalValueSelected;
-                continue;
-            }
-
+            if (size <= lastCalculatedSize || req.feePerTxSize.signum() <= 0) {
             if (isCategory3) {
                 if (selection3 == null)
                     selection3 = selection;
@@ -445,7 +440,10 @@ public class TransactionCreator {
                 continue;
             }
             break;
-        }
+        } else {
+                lastCalculatedSize = size;
+                additionalValueForNextCategory = additionalValueSelected;
+            }}
 
         resetTxInputs(tx, originalInputs);
 
@@ -494,7 +492,9 @@ public class TransactionCreator {
         int size = tx.bitcoinSerialize().length;
         size += estimateBytesForSigning(coinSelection);
         Coin fee;
-        switch (coinType.getFeePolicy()) {
+        switch (coinType.getFeePolicy()) {  case FEE_PER_KB_APPLY_PER_BYTE:
+            fee = baseFee.add(feePerTxSize.divide(1000).multiply((long) size));
+            break;
             case FEE_PER_KB:
                 fee = baseFee.add(feePerTxSize.multiply((size / 1000) + 1));
                 break;
@@ -502,7 +502,7 @@ public class TransactionCreator {
                 fee = baseFee.add(feePerTxSize);
                 break;
             default:
-                throw new RuntimeException("Unknown fee policy: " + coinType.getFeePolicy());
+                throw new RuntimeException("Unsupported fee policy: " + this.feePolicy + ", for type: " + this.coinType);
         }
         output.setValue(output.getValue().subtract(fee));
         // Check if we need additional fee due to the output's value

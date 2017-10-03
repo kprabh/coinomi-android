@@ -96,7 +96,7 @@ public class IntroActivity extends AbstractWalletFragmentActivity
 
     @Override
     public void onSeedVerified(Bundle args) {
-        replaceFragment(SetPasswordFragment.newInstance(args));
+        replaceFragment(SetPasswordFragment.newInstance(args, true, true));
     }
 
     @Override
@@ -112,6 +112,9 @@ public class IntroActivity extends AbstractWalletFragmentActivity
     private void selectCoins(Bundle args) {
         String message = getResources().getString(R.string.select_coins);
         replaceFragment(SelectCoinsFragment.newInstance(message, true, args));
+    }
+    public void onSeedConfirmed(Bundle args) {
+        replaceFragment(SetPasswordFragment.newInstance(args, true, true));
     }
 
     @Override

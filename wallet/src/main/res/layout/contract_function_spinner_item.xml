@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:paddingTop="@dimen/half_standard_margin"
+    android:paddingBottom="@dimen/half_standard_margin"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+<TextView
+    android:id="@+id/function_name"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    style="@style/NormalText" />
+<TextView
+    android:id="@+id/function_cost_money"
+    android:visibility="gone"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginLeft="@dimen/quarter_standard_margin"
+    android:text="font_icon_cost"
+    style="@style/SecondaryText" />
+    </LinearLayout>

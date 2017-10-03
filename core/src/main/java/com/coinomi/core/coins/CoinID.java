@@ -74,8 +74,8 @@ public enum CoinID {
     private static HashMap<String, ArrayList<CoinType>> uriLookup = new HashMap<>();
 
     static {
-        Set<NetworkParameters> bitcoinjNetworks = Networks.get();
-        for (NetworkParameters network : bitcoinjNetworks) {
+      //  Set<NetworkParameters> bitcoinjNetworks = Networks.get();
+        for (NetworkParameters network : Networks.get()) {
             Networks.unregister(network);
         }
 

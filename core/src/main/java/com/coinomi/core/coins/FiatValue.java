@@ -8,7 +8,7 @@ import static com.google.common.base.Preconditions.checkArgument;
  * @author John L. Jegutanis
  */
 public class FiatValue {
-    public static Value valueOf(final String currencyCode, final long units) {
+    public static Value valueOf(final String currencyCode, final String units) {
         return Value.valueOf(FiatType.get(currencyCode), units);
     }
 
@@ -20,7 +20,7 @@ public class FiatValue {
     }
 
     public static Value valueOf(final Fiat fiat) {
-        return FiatValue.valueOf(fiat.currencyCode, fiat.getValue());
+        return FiatValue.valueOf(fiat.currencyCode, fiat.toString());
     }
 
     /**

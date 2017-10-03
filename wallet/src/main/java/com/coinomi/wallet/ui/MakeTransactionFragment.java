@@ -18,12 +18,17 @@ import android.support.v4.content.Loader;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.exceptions.NoSuchPocketException;
 import com.coinomi.core.exchange.shapeshift.ShapeShift;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftAmountTx;
@@ -36,8 +41,10 @@ import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.core.wallet.SendRequest;
+import com.coinomi.core.wallet.families.bitcoin.TransactionWatcherWallet;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.bitcoin.TxFeeEventListener;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.ExchangeHistoryProvider;
 import com.coinomi.wallet.ExchangeHistoryProvider.ExchangeEntry;
@@ -47,20 +54,24 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.widget.SendOutput;
 import com.coinomi.wallet.ui.widget.TransactionAmountVisualizer;
 import com.coinomi.wallet.util.Keyboard;
+import com.coinomi.wallet.util.WalletUtils;
 import com.coinomi.wallet.util.WeakHandler;
 
+import org.acra.ACRA;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.spongycastle.util.encoders.Hex;
 
 import java.util.HashMap;
 
 import javax.annotation.Nullable;
-
-import butterknife.Bind;
+import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
+import butterknife.OnItemSelected;
+import butterknife.Unbinder;
 
 import static com.coinomi.core.Preconditions.checkNotNull;
 import static com.coinomi.core.Preconditions.checkState;
@@ -71,13 +82,12 @@ import static com.coinomi.wallet.Constants.ARG_SEND_TO_ACCOUNT_ID;
 import static com.coinomi.wallet.Constants.ARG_SEND_TO_ADDRESS;
 import static com.coinomi.wallet.Constants.ARG_SEND_VALUE;
 import static com.coinomi.wallet.Constants.ARG_TX_MESSAGE;
-import static com.coinomi.wallet.ExchangeRatesProvider.getRates;
 
 /**
  * This fragment displays a busy message and makes the transaction in the background
  *
  */
-public class MakeTransactionFragment extends Fragment {
+public class MakeTransactionFragment extends Fragment implements TxFeeEventListener {
     private static final Logger log = LoggerFactory.getLogger(MakeTransactionFragment.class);
 
     private static final int START_TRADE_TIMEOUT = 0;
@@ -109,9 +119,8 @@ public class MakeTransactionFragment extends Fragment {
     private CreateTransactionTask createTransactionTask;
     private WalletApplication application;
     private Configuration config;
-
+    private String contractData;
     @Nullable AbstractAddress sendToAddress;
-    boolean sendingToAccount;
     @Nullable private Value sendAmount;
     boolean emptyWallet;
     private CoinType sourceType;
@@ -128,10 +137,19 @@ public class MakeTransactionFragment extends Fragment {
     private HashMap<String, ExchangeRate> localRates = new HashMap<>();
     private CountDownTimer countDownTimer;
 
-    @Bind(R.id.transaction_info) TextView transactionInfo;
-    @Bind(R.id.password) EditText passwordView;
-    @Bind(R.id.transaction_amount_visualizer) TransactionAmountVisualizer txVisualizer;
-    @Bind(R.id.transaction_trade_withdraw) SendOutput tradeWithdrawSendOutput;
+    @BindView(R.id.transaction_info) TextView transactionInfo;
+    @BindView(R.id.password) EditText passwordView;
+    @BindView(R.id.transaction_amount_visualizer) TransactionAmountVisualizer txVisualizer;
+    boolean sendingToAccount;
+    private boolean staticRequest = false;
+    @BindView(R.id.transaction_trade_withdraw) SendOutput tradeWithdrawSendOutput;
+    @BindView(2131689709)
+    View changeFeesView;
+    @BindView(2131689710)
+    Spinner feePriority;
+    private Value lastFee;
+    private ShapeShiftMarketInfo marketInfo;
+    private Unbinder unbinder;
 
     public static MakeTransactionFragment newInstance(Bundle args) {
         MakeTransactionFragment fragment = new MakeTransactionFragment();
@@ -193,7 +211,7 @@ public class MakeTransactionFragment extends Fragment {
                 tradeWithdrawAddress = (AbstractAddress) savedState.getSerializable(WITHDRAW_ADDRESS);
                 tradeWithdrawAmount = (Value) savedState.getSerializable(WITHDRAW_AMOUNT);
             }
-
+            preloadCachedRates();
             maybeStartCreateTransaction();
         } catch (Exception e) {
             error = e;
@@ -202,20 +220,30 @@ public class MakeTransactionFragment extends Fragment {
             }
         }
 
-        String localSymbol = config.getExchangeCurrencyCode();
-        for (ExchangeRatesProvider.ExchangeRate rate : getRates(getActivity(), localSymbol).values()) {
-            localRates.put(rate.currencyCodeId, rate.rate);
+//        String localSymbol = config.getExchangeCurrencyCode();
+//        for (ExchangeRatesProvider.ExchangeRate rate : getRates(getActivity(), localSymbol).values()) {
+//            localRates.put(rate.currencyCodeId, rate.rate);
+//        }
+    }
+    private void preloadCachedRates() {
+        for (ExchangeRatesProvider.ExchangeRate rate : ExchangeRatesProvider.getRates(getActivity(), this.config.getExchangeCurrencyCode()).values()) {
+            this.localRates.put(rate.currencyCodeId, rate.rate);
         }
     }
-
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_make_transaction, container, false);
-        ButterKnife.bind(this, view);
+        unbinder = ButterKnife.bind(this, view);
 
         if (error != null) return view;
-
+        if (!this.staticRequest && this.sourceType.hasSelectableFees()) {
+            this.changeFeesView.setVisibility(View.VISIBLE);
+            ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(getContext(), R.array.fee_priority_array, 17367048);
+            adapter.setDropDownViewResource(17367049);
+            this.feePriority.setAdapter(adapter);
+            this.feePriority.setSelection(2);
+        }
         transactionInfo.setVisibility(View.GONE);
 
         final TextView passwordLabelView = (TextView) view.findViewById(R.id.enter_password_label);
@@ -250,9 +278,61 @@ public class MakeTransactionFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        ButterKnife.unbind(this);
+        unbinder.unbind();
+    }
+    @OnItemSelected({2131689710})
+    public void onFeePrioritySelected(AdapterView<?> adapterView, View view, int pos, long id) {
+        if (this.sourceAccount instanceof TransactionWatcherWallet) {
+            TransactionWatcherWallet account = (TransactionWatcherWallet)this.sourceAccount;
+            switch (pos) {
+                case 0:
+                    onSetFee(this.sourceType.getFeeValue());
+                    return;
+                case 1:
+                    account.estimateFee(24, this);
+                    return;
+                case 3:
+                    account.estimateFee(3, this);
+                    return;
+                default:
+                    account.estimateFee(12, this);
+                    return;
+            }
+        }
     }
 
+    public void onFeeEstimate(Value feeValue) {
+        this.handler.sendMessage(this.handler.obtainMessage(4, feeValue));
+    }
+
+    private void onSetFee(Value newFee) {
+        Preconditions.checkState(!this.staticRequest);
+        this.lastFee = newFee;
+        if (this.lastFee.isNegative()) {
+            Toast.makeText(getActivity(), R.string.estimating_fees_error, Toast.LENGTH_LONG).show();
+        }
+        if (this.request != null) {
+            this.request.reset();
+            this.request.setFeePerTxSize(newFee);
+            try {
+                this.sourceAccount.completeTransaction(this.request);
+                if (isExchangeNeeded() && this.marketInfo != null) {
+                    this.tradeWithdrawAmount = this.marketInfo.rate.convert(this.request.getTx(true).getValue(this.sourceAccount).negate().subtract(this.request.getTx(true).getFee()));
+                }
+                showTransaction();
+            } catch (Throwable e) {
+                String errorMessage = WalletUtils.getErrorMessage(getContext(), e);
+                if (errorMessage == null) {
+                    if (ACRA.isInitialised()) {
+                        ACRA.getErrorReporter().handleSilentException(e);
+                    }
+                    log.error("An unknown error occurred while sending coins", e);
+                    errorMessage = getString(R.string.send_coins_error, e.getMessage());
+                }
+                Toast.makeText(getActivity(), errorMessage, Toast.LENGTH_LONG).show();
+            }
+        }
+    }
     @OnClick(R.id.button_confirm)
     void onConfirmClick() {
         if (passwordView.isShown()) {
@@ -299,16 +379,25 @@ public class MakeTransactionFragment extends Fragment {
                                             @Nullable Value amount, @Nullable TxMessage txMessage)
             throws WalletAccount.WalletAccountException {
 
-        SendRequest sendRequest;
+        SendRequest sendRequest;byte[] bArr = null;
         if (emptyWallet) {
-            sendRequest = sourceAccount.getEmptyWalletRequest(sendTo);
-        } else {
-            sendRequest = sourceAccount.getSendToRequest(sendTo, checkNotNull(amount));
+            sendRequest = sourceAccount.getEmptyWalletRequest(sendTo, contractData == null ? null : Hex.decode(this.contractData));
+        } else {            AbstractWallet abstractWallet = this.sourceAccount;
+            Value value = (Value) checkNotNull(amount);
+            if (this.contractData != null) {
+                bArr = Hex.decode(this.contractData);
+            }
+            sendRequest = sourceAccount.getSendToRequest(sendTo, value, bArr);
         }
         sendRequest.txMessage = txMessage;
         sendRequest.signTransaction = false;
-        sourceAccount.completeTransaction(sendRequest);
-
+        if (!this.sourceType.hasDynamicFees() || (this.sourceType instanceof EthFamily)) {
+            this.sourceAccount.completeTransaction(sendRequest);
+        }
+        if (this.sourceType.hasDynamicFees() && this.lastFee != null) {
+            sendRequest.setFeePerTxSize(this.lastFee);
+            this.sourceAccount.completeTransaction(sendRequest);
+        }
         return sendRequest;
     }
 
@@ -536,7 +625,9 @@ public class MakeTransactionFragment extends Fragment {
                     break;
                 case STOP_TRADE_TIMEOUT:
                     ref.onStopTradeCountDown();
-                    break;
+                    break;case 4:
+                    ref.onSetFee((Value) msg.obj);
+                    return;
             }
         }
     }
@@ -549,6 +640,8 @@ public class MakeTransactionFragment extends Fragment {
                 Dialogs.ProgressDialogFragment.show(getFragmentManager(),
                         getString(R.string.contacting_exchange),
                         PREPARE_TRANSACTION_BUSY_DIALOG_TAG);
+            } else if (MakeTransactionFragment.this.sourceType.hasDynamicFees()) {
+                Dialogs.ProgressDialogFragment.show(MakeTransactionFragment.this.getFragmentManager(), MakeTransactionFragment.this.getString(R.string.estimating_fees), "prepare_transaction_busy_dialog_tag");
             }
         }
 

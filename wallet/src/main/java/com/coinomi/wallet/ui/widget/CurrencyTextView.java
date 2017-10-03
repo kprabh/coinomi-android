@@ -61,7 +61,7 @@ public final class CurrencyTextView extends TextView {
     public void setAmount(@Nonnull final Value amount) {
         this.amount = amount;
         this.type = amount.type;
-        if (format == null) format = type.getMonetaryFormat().noCode();
+        if (format == null) format = type.getMoneyFormat().noCode();
         updateView();
     }
 

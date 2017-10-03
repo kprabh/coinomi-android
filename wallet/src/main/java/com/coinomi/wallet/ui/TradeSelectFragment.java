@@ -46,6 +46,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 
 import org.acra.ACRA;
+import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.KeyCrypterException;
 import org.bitcoinj.utils.Threading;
 import org.slf4j.Logger;
@@ -56,6 +57,11 @@ import java.util.List;
 import java.util.Timer;
 
 import javax.annotation.Nullable;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
 
 import static com.coinomi.core.coins.Value.canCompare;
 
@@ -84,17 +90,17 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
     private final AccountListener sourceAccountListener = new AccountListener(handler);
     @Nullable private Listener listener;
     @Nullable private MenuItem actionSwapMenu;
-    private Spinner sourceSpinner;
-    private Spinner destinationSpinner;
+    @BindView(2131689785) Spinner sourceSpinner;
+    @BindView(2131689786) Spinner destinationSpinner;
     private AvailableAccountsAdaptor sourceAdapter;
     private AvailableAccountsAdaptor destinationAdapter;
-    private AmountEditView sourceAmountView;
-    private AmountEditView destinationAmountView;
+    @BindView(2131689788) AmountEditView sourceAmountView;
+    @BindView(2131689789) AmountEditView destinationAmountView;
     private CurrencyCalculatorLink amountCalculatorLink;
-    private TextView amountError;
-    private TextView amountWarning;
-    private Button nextButton;
-
+    @BindView(2131689750) TextView amountError;
+    @BindView(2131689751) TextView amountWarning;
+    @BindView(2131689685) Button nextButton;
+    private Unbinder unbinder;
     // Tasks
     private MarketInfoTask marketTask;
     private ExchangeCheckSupportedCoinsTask initialTask;
@@ -111,7 +117,22 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
     @Nullable private Value minimumDeposit;
     @Nullable private Value lastBalance;
     @Nullable private ExchangeRate lastRate;
+    @OnClick({2131689747})
+    public void onEmptyWalletClick() {
+        setAmountForEmptyWallet();
+    }
 
+    private void setAmountForEmptyWallet() {
+        updateBalance();
+        if (this.lastBalance != null) {
+            if (this.lastBalance.isZero()) {
+                Toast.makeText(getActivity(), getResources().getString(R.string.amount_error_not_enough_money_plain), Toast.LENGTH_LONG).show();
+                return;
+            }
+            this.amountCalculatorLink.setPrimaryAmount(this.lastBalance);
+            validateAmount();
+        }
+    }
 
     /** Required empty public constructor */
     public TradeSelectFragment() {}
@@ -130,7 +151,10 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
         // Select some default coins
         sourceAccount = application.getAccount(application.getConfiguration().getLastAccountId());
         if (sourceAccount == null) {
-            List<WalletAccount> accounts = application.getAllAccounts();
+            List<WalletAccount> accounts = application.getAllAccounts();if (accounts.size() == 0) {
+                getActivity().finish();
+                return;
+            }
             sourceAccount = accounts.get(0);
         }
 
@@ -149,7 +173,7 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_trade_select, container, false);
-
+        unbinder = ButterKnife.bind((Object) this, view);
         sourceSpinner = (Spinner) view.findViewById(R.id.from_coin);
         sourceSpinner.setAdapter(getSourceSpinnerAdapter());
         sourceSpinner.setOnItemSelectedListener(getSourceSpinnerListener());
@@ -255,7 +279,11 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
         super.onDetach();
         listener = null;
     }
-
+    public void onDestroyView() {
+        this.amountCalculatorLink = null;
+        unbinder.unbind();
+        super.onDestroyView();
+    }
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.trade, menu);
@@ -339,9 +367,9 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
     /**
      * Start account creation task and proceed
      */
-    void maybeStartAddCoinAndProceedTask(@Nullable String description, @Nullable CharSequence password) {
+    void maybeStartAddCoinAndProceedTask(@Nullable String description, @Nullable CharSequence password, List<ChildNumber> customPath) {
         if (addCoinAndProceedTask == null) {
-            addCoinAndProceedTask = new AddCoinTask(this, destinationType, wallet, description, password);
+            addCoinAndProceedTask = new AddCoinTask(this, destinationType, wallet, description, password, customPath);
             addCoinAndProceedTask.execute();
         }
     }
@@ -474,7 +502,9 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
             builder.setMessage(R.string.trade_warn_no_connection_message);
         } else {
             builder = DialogBuilder.warn(getActivity(), R.string.trade_error);
-            builder.setMessage(R.string.trade_error_service_not_available);
+            builder.setMessage(R.string.trade_error_service_not_available);if (ACRA.isInitialised()) {
+                ACRA.getErrorReporter().putCustomData("trade-error", error);
+            }
         }
 
         builder.setNegativeButton(R.string.button_dismiss, null);
@@ -701,7 +731,7 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
 
         sourceAmountView.reset();
         sourceAmountView.setType(sourceAccount.getCoinType());
-        sourceAmountView.setFormat(sourceAccount.getCoinType().getMonetaryFormat());
+        sourceAmountView.setFormat(sourceAccount.getCoinType().getMoneyFormat());
 
         amountCalculatorLink.setExchangeRate(null);
 
@@ -744,7 +774,7 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
 
         destinationAmountView.reset();
         destinationAmountView.setType(destinationType);
-        destinationAmountView.setFormat(destinationType.getMonetaryFormat());
+        destinationAmountView.setFormat(destinationType.getMoneyFormat());
 
         amountCalculatorLink.setExchangeRate(null);
 
@@ -891,8 +921,7 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
         } else {
             amountWarning.setVisibility(View.GONE);
             sendAmount = null;
-            boolean showErrors = shouldShowErrors(isTyping, depositAmount) ||
-                                 shouldShowErrors(isTyping, withdrawAmount);
+            boolean showErrors = shouldShowErrors(isTyping, depositAmount, withdrawAmount);
             // ignore printing errors for null and zero amounts
             if (showErrors) {
                 if (depositAmount == null || withdrawAmount == null) {
@@ -957,15 +986,15 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
     /**
      * Decide if should show errors in the UI.
      */
-    private boolean shouldShowErrors(boolean isTyping, Value amountParsed) {
-        if (canCompare(amountParsed, lastBalance) && amountParsed.compareTo(lastBalance) >= 0) {
+    private boolean shouldShowErrors(boolean isTyping, Value sending, Value receiving) {
+        if (canCompare(sending, lastBalance) && sending.compareTo(lastBalance) >= 0) {
             return true;
         }
 
         if (isTyping) return false;
         if (amountCalculatorLink.isEmpty()) return false;
-        if (amountParsed != null && amountParsed.isZero()) return false;
-
+        if (sending != null && sending.isZero()) return false;
+        if (receiving != null && receiving.isZero()) return false;
         return true;
     }
 

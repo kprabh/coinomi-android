@@ -284,11 +284,11 @@ public class TransactionsListAdapter extends BaseAdapter {
         if (tx.isGenerated()) {
             rowDirectionText.setText(minedTitle);
             rowDirectionFontIcon.setText(fontIconMined);
-        } else {
-            if (value.isNegative()) {
-                rowDirectionText.setText(sentToTitle);
-                rowDirectionFontIcon.setText(fontIconSentTo);
-            } else if (walletPocket.getCoinType().getFamily() != Families.NXT) {
+        } else if (sent) {
+            rowDirectionText.setText(this.sentToTitle);
+            rowDirectionFontIcon.setText(this.fontIconSentTo);
+        }else {
+            if (walletPocket.getCoinType().getFamily() != Families.NXT|| this.walletPocket.getCoinType().getFamily() == Families.ETHEREUM) {
                 rowDirectionText.setText(receivedWithTitle);
                 rowDirectionFontIcon.setText(fontIconReceivedWith);
             } else {

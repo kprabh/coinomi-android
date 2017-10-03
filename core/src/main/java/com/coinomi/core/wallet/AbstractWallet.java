@@ -3,9 +3,12 @@ package com.coinomi.core.wallet;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.ValueType;
 import com.coinomi.core.util.TypeUtils;
+import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
 
+import org.bitcoinj.crypto.HDUtils;
 import org.bitcoinj.utils.Threading;
 
+import java.lang.ref.WeakReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nullable;
@@ -19,6 +22,23 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
     protected String description;
     protected final CoinType type;
     protected final ReentrantLock lock = Threading.lock("AbstractWallet");
+    private Runnable saveLaterRunnable = new Runnable() {
+        public void run() {
+            Wallet wallet = AbstractWallet.this.getWallet();
+            if (wallet != null) {
+                wallet.saveLater();
+            }
+        }
+    };
+    private Runnable saveNowRunnable = new Runnable() {
+        public void run() {
+            Wallet wallet = AbstractWallet.this.getWallet();
+            if (wallet != null) {
+                wallet.saveNow();
+            }
+        }
+    };
+    protected WeakReference<Wallet> walletRef = new WeakReference(null);
 
     public AbstractWallet(CoinType coinType, String id) {
         this.type = coinType;
@@ -34,7 +54,38 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
     public CoinType getCoinType() {
         return type;
     }
+    public void setWallet(Wallet wallet) {
+        this.lock.lock();
+        if (wallet != null) {
+            try {
+                this.walletRef.clear();
+                this.walletRef = new WeakReference(wallet);
+            } catch (Throwable th) {
+                this.lock.unlock();
+            }
+        } else {
+            this.walletRef.clear();
+        }
+        this.lock.unlock();
+    }
 
+    public Wallet getWallet() {
+        this.lock.lock();
+        try {
+            Wallet wallet = (Wallet) this.walletRef.get();
+            return wallet;
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    public void walletSaveLater() {
+        Threading.USER_THREAD.execute(this.saveLaterRunnable);
+    }
+
+    public void walletSaveNow() {
+        Threading.USER_THREAD.execute(this.saveNowRunnable);
+    }
     /**
      * Set the description of the wallet.
      * This is a Unicode encoding string typically entered by the user as descriptive text for the wallet.
@@ -67,7 +118,14 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
             return description;
         }
     }
+    public String getDefaultAccountName() {
+        String extraPart = isStandardPath() ? getAccountIndex() > 0 ? " #" + (getAccountIndex() + 1) : "" : " " + HDUtils.formatPath(getDeterministicRootKeyPath());
+        return this.type.getName() + extraPart;
+    }
 
+    public boolean isStandardPath() {
+        return getDeterministicRootKeyPath().equals(this.type.getBip44Path(getAccountIndex()));
+    }
     @Override
     public void completeAndSignTx(SendRequest request) throws WalletAccountException {
         if (request.isCompleted()) {
