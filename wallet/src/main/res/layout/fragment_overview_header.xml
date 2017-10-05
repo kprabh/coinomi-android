@@ -28,4 +28,10 @@
             coinomi:show_big="true"
             android:gravity="center_horizontal" />
     </LinearLayout>
+    <com.coinomi.wallet.ui.widget.SponsorView
+        android:id="@+id/sponsor_view"
+        android:visibility="gone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+         />
 </LinearLayout>

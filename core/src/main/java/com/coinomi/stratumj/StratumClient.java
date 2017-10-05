@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class StratumClient extends AbstractExecutionThreadService {
     private static final Logger log = LoggerFactory.getLogger(StratumClient.class);
-    private final int NUM_OF_WORKERS = 1;
+    private final int NUM_OF_WORKERS = 2;
 
     private AtomicLong idCounter = new AtomicLong();
     private ServerAddress serverAddress;
@@ -44,7 +44,7 @@ public class StratumClient extends AbstractExecutionThreadService {
     @VisibleForTesting DataOutputStream toServer;
     BufferedReader fromServer;
 
-    final private ExecutorService pool = Executors.newFixedThreadPool(NUM_OF_WORKERS);
+    final private ExecutorService pool = Executors.newFixedThreadPool(2);
 
     final private ConcurrentHashMap<Long, SettableFuture<ResultMessage>> callers =
             new ConcurrentHashMap<>();
@@ -173,9 +173,8 @@ public class StratumClient extends AbstractExecutionThreadService {
 
     @Override
     protected void startUp() {
-        for (int i = 0; i < NUM_OF_WORKERS; i++) {
-            pool.submit(new ReceiveMessageHandler());
-        }
+        pool.submit(new SendMessageHandler());
+        pool.submit(new ReceiveMessageHandler());
         try {
             socket = createSocket();
             log.info("Creating I/O streams to socket: {}", socket);
