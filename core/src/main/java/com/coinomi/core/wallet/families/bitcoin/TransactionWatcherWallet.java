@@ -1446,7 +1446,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         }
     }
 
-    @Override
+/*    @Override
     public void broadcastTx(AbstractTransaction tx) throws TransactionBroadcastException {
         if (tx instanceof BitTransaction) {
             // TODO throw transaction broadcast exception
@@ -1454,7 +1454,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         } else {
             throw new TransactionBroadcastException("Incompatible transaction type: " + tx.getClass().getName());
         }
-    }
+    }*/
 
     @Override
     public boolean broadcastTxSync(AbstractTransaction tx) throws TransactionBroadcastException {
@@ -1488,7 +1488,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         }
     }
 
-    private void broadcastTx(BitTransaction tx, TransactionEventListener<BitTransaction> listener)
+   /* private void broadcastTx(BitTransaction tx, TransactionEventListener<BitTransaction> listener)
             throws TransactionBroadcastException {
         if (isConnected()) {
             lock.lock();
@@ -1503,7 +1503,7 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         } else {
             throw new TransactionBroadcastException("No connection available");
         }
-    }
+    }*/
 
     public boolean isConnected() {
         lock.lock();

@@ -58,39 +58,39 @@ import static com.google.common.util.concurrent.Service.State.NEW;
 public final class ServerClient extends ServerClientBase implements BitBlockchainConnection {
     private static final Logger log = LoggerFactory.getLogger(ServerClient.class);
 
-    private static final ScheduledThreadPoolExecutor connectionExec;
+    //private static final ScheduledThreadPoolExecutor connectionExec;
     private static final String CLIENT_PROTOCOL = "0.9";
 
-    static {
-        connectionExec = new ScheduledThreadPoolExecutor(1);
-        // FIXME, causing a crash in old Androids
+    //static {
+    //    connectionExec = new ScheduledThreadPoolExecutor(1);
+    // FIXME, causing a crash in old Androids
 //        connectionExec.setRemoveOnCancelPolicy(true);
-    }
-    private static final Random RANDOM = new Random();
+    // }
+    //private static final Random RANDOM = new Random();
 
     private static final long MAX_WAIT = 16;
     private static final long CONNECTION_STABILIZATION = 30;
 
 
     private CoinType type;
-    private ServerAddress lastServerAddress;
+    //   private ServerAddress lastServerAddress;
     private StratumClient stratumClient;
-    private long retrySeconds = 0;
-    private long reconnectAt = 0;
-    private boolean stopped = false;
+    //  private long retrySeconds = 0;
+    // private long reconnectAt = 0;
+    // private boolean stopped = false;
 
     private File cacheDir;
     private int cacheSize;
 
     // TODO, only one is supported at the moment. Change when accounts are supported.
-    private transient CopyOnWriteArrayList<ListenerRegistration<ConnectionEventListener>> eventListeners;
+    // private transient CopyOnWriteArrayList<ListenerRegistration<ConnectionEventListener>> eventListeners;
 
 
 
-    private void reschedule(Runnable r, long delay, TimeUnit unit) {
+  /*  private void reschedule(Runnable r, long delay, TimeUnit unit) {
         connectionExec.remove(r);
         connectionExec.schedule(r, delay, unit);
-    }
+    }*/
 
    /* private Runnable reconnectTask = new Runnable() {
         @Override
@@ -114,7 +114,7 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
         }
     };*/
 
-    private Runnable connectionCheckTask = new Runnable() {
+    /*private Runnable connectionCheckTask = new Runnable() {
         @Override
         public void run() {
             if (isActivelyConnected()) {
@@ -122,7 +122,7 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
                 retrySeconds = 0;
             }
         }
-    };
+    };*/
 
     private Service.Listener serviceListener = new Service.Listener() {
         @Override
@@ -139,7 +139,9 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
 
     public ServerClient(CoinAddress coinAddress, ConnectivityHelper connectivityHelper){
         super(coinAddress, connectivityHelper);
-    }    protected void setupNetworkClient(ServerAddress address) {
+    }
+
+    protected void setupNetworkClient(ServerAddress address) {
         checkState(this.stratumClient == null);
         this.stratumClient = new StratumClient(address);
         this.stratumClient.addListener(this.serviceListener, Threading.USER_THREAD);
@@ -269,32 +271,32 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
      * Adds an event listener object. Methods on this object are called when something interesting happens,
      * like new connection to a server. The listener is executed by {@link org.bitcoinj.utils.Threading#USER_THREAD}.
      */
-    @Override
-    public void addEventListener(ConnectionEventListener listener) {
+
+   /* public void addEventListener(ConnectionEventListener listener) {
         addEventListener(listener, Threading.USER_THREAD);
-    }
+    }*/
 
     /**
      * Adds an event listener object. Methods on this object are called when something interesting happens,
      * like new connection to a server. The listener is executed by the given executor.
      */
-    private void addEventListener(ConnectionEventListener listener, Executor executor) {
+   /* private void addEventListener(ConnectionEventListener listener, Executor executor) {
         boolean isNew = !ListenerRegistration.removeFromList(listener, eventListeners);
         eventListeners.add(new ListenerRegistration<ConnectionEventListener>(listener, executor));
         if (isNew && isActivelyConnected()) {
             broadcastOnConnection();
         }
-    }
+    }*/
 
     /**
      * Removes the given event listener object. Returns true if the listener was removed, false if that listener
      * was never added.
      */
-    public boolean removeEventListener(ConnectionEventListener listener) {
+   /* public boolean removeEventListener(ConnectionEventListener listener) {
         return ListenerRegistration.removeFromList(listener, eventListeners);
-    }
+    }*/
 
-    private void broadcastOnConnection() {
+   /* private void broadcastOnConnection() {
         for (final ListenerRegistration<ConnectionEventListener> registration : eventListeners) {
             registration.executor.execute(new Runnable() {
                 @Override
@@ -303,9 +305,9 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
                 }
             });
         }
-    }
+    }*/
 
-    private void broadcastOnDisconnect() {
+    /*private void broadcastOnDisconnect() {
         for (final ListenerRegistration<ConnectionEventListener> registration : eventListeners) {
             registration.executor.execute(new Runnable() {
                 @Override
@@ -314,7 +316,7 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
                 }
             });
         }
-    }
+    }*/
 
     private BlockHeader parseBlockHeader(CoinType type, JSONObject json) throws JSONException {
         return new BlockHeader(type, json.getLong("timestamp"), json.getInt("block_height"));
@@ -621,8 +623,8 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
         }, Threading.USER_THREAD);
     }
 
-    @Override
-    public void broadcastTx(final BitTransaction tx,
+    // @Override
+/*    public void broadcastTx(final BitTransaction tx,
                             @Nullable final TransactionEventListener<BitTransaction> listener) {
         checkNotNull(stratumClient);
 
@@ -653,7 +655,7 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
                 if (listener != null) listener.onTransactionBroadcastError(tx);
             }
         }, Threading.USER_THREAD);
-    }
+    }*/
 
     @Override
     public boolean broadcastTxSync(final BitTransaction tx) {

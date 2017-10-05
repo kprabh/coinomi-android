@@ -88,7 +88,7 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
 
     boolean broadcastTxSync(AbstractTransaction tx) throws TransactionBroadcastException;
 
-    void broadcastTx(AbstractTransaction tx) throws TransactionBroadcastException;
+    //void broadcastTx(AbstractTransaction tx) throws TransactionBroadcastException;
 
     /**
      * Returns true if this wallet can create new addresses

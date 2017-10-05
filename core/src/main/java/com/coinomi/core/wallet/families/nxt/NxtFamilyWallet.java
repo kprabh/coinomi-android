@@ -350,10 +350,10 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
         }
     }
 
-    @Override
+   /* @Override
     public void broadcastTx(AbstractTransaction tx) throws TransactionBroadcastException {
         throw new RuntimeException("Not implemented");
-    }
+    }*/
 
     @Override
     public AbstractAddress getRefundAddress(boolean isManualAddressManagement) {
@@ -765,11 +765,11 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
         try {
             //AddressStatus updatingStatus = statusPendingUpdates.get(status.getAddress());
             // Check if this updating status is valid
-                status.queueHistoryTransactions(historyTxes);
-                log.info("Fetching txs");
-                fetchTransactions(historyTxes);
-                queueOnNewBalance();
-                //tryToApplyState(updatingStatus);
+            status.queueHistoryTransactions(historyTxes);
+            log.info("Fetching txs");
+            fetchTransactions(historyTxes);
+            queueOnNewBalance();
+            //tryToApplyState(updatingStatus);
         }
         finally {
             lock.unlock();

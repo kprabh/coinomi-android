@@ -147,7 +147,7 @@ public class NxtServerClient implements BlockchainConnection<NxtTransaction> {
     private String getAccountInfo(AbstractAddress address) {
         StringBuilder builder = new StringBuilder();
         builder.append(getBaseUrl()).append(GET_REQUEST).append(GET_ACCOUNT)
-        .append("&account=").append(address.toString());
+                .append("&account=").append(address.toString());
         return builder.toString();
     }
 
@@ -491,10 +491,11 @@ public class NxtServerClient implements BlockchainConnection<NxtTransaction> {
 
     }
 
+   /* @Deprecated
     @Override
     public void broadcastTx(NxtTransaction tx, TransactionEventListener listener) {
 
-    }
+    }*/
 
     @Override
     public boolean broadcastTxSync(final NxtTransaction tx) {

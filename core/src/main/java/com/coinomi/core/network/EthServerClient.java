@@ -183,9 +183,9 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
             log.info("new block");
             try {
                 BlockHeader header = new BlockHeader(this.type, obj.getLong("timestamp"), obj.getInt("height"));
-               // try {
-                    t.onNewBlock(header);
-                    blockHeader = header;
+                // try {
+                t.onNewBlock(header);
+                blockHeader = header;
             /*    } catch (JSONException e2) {
                     e = e2;
                     blockHeader = header;
@@ -333,6 +333,7 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
 
     }
 
+    @Deprecated
     public void broadcastTx(Object tx, TransactionEventListener listener) {
 
     }

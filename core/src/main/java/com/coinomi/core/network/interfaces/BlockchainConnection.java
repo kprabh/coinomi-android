@@ -24,8 +24,8 @@ public interface BlockchainConnection<T> extends ClientConnection {
 
     void getTransaction(Sha256Hash txHash, TransactionEventListener<T> listener);
 
-    void broadcastTx(final T tx, final TransactionEventListener<T> listener);
-
+    // void broadcastTx(final T tx, final TransactionEventListener<T> listener);
+    @Deprecated
     boolean broadcastTxSync(final T tx);
 
 }
