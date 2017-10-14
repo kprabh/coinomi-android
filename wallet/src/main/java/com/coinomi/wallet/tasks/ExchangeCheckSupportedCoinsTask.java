@@ -13,6 +13,7 @@ public class ExchangeCheckSupportedCoinsTask extends AsyncTask<Void, Void, Void>
     private final Listener listener;
     private final WalletApplication application;
     private Exception error;
+    private String exchange;
     private ShapeShiftCoins shapeShiftCoins;
 
     public interface Listener {
@@ -20,9 +21,10 @@ public class ExchangeCheckSupportedCoinsTask extends AsyncTask<Void, Void, Void>
         void onExchangeCheckSupportedCoinsTaskFinished(Exception error, ShapeShiftCoins shapeShiftCoins);
     }
 
-    public ExchangeCheckSupportedCoinsTask(Listener listener, WalletApplication application) {
+    public ExchangeCheckSupportedCoinsTask(Listener listener, WalletApplication application, String exchange) {
         this.listener = listener;
         this.application = application;
+        this.exchange = exchange;
     }
 
 
@@ -35,7 +37,7 @@ public class ExchangeCheckSupportedCoinsTask extends AsyncTask<Void, Void, Void>
     protected Void doInBackground(Void... params) {
         if (application.isConnected()) {
             try {
-                shapeShiftCoins = application.getShapeShift().getCoins();
+                shapeShiftCoins = application.getShapeShift(this.exchange).getCoins();
             } catch (Exception e) {
                 error = e;
             }

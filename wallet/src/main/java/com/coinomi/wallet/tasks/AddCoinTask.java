@@ -17,7 +17,7 @@ import javax.annotation.Nullable;
 public final class AddCoinTask  extends AsyncTask<Void, Void, Void> {
     private final List<ChildNumber> customPath;
     private final Listener listener;
-    protected final CoinType type;
+    public final CoinType type;
     private final Wallet wallet;
     @Nullable
     private final String description;

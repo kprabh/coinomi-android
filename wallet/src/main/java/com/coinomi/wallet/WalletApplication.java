@@ -14,7 +14,7 @@ import android.os.StrictMode.ThreadPolicy.Builder;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
-
+import com.coinomi.sponsor.TokenSaleProxy;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.CoinType.FeeProvider;
 import com.coinomi.core.coins.Value;
@@ -47,6 +47,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
@@ -74,12 +75,23 @@ public class WalletApplication extends Application {
     @Nullable
     private Wallet wallet;
     private PackageInfo packageInfo;
+    private TokenSaleProxy tokenSaleProxy;
     private String versionString;
     private boolean whatsNew = false;
     private long lastStop;
     private ConnectivityManager connManager;
     private ShapeShift shapeShift;
     private File txCachePath;
+    private ConcurrentHashMap<String, ShapeShift> exchanges = new ConcurrentHashMap();
+
+    class C03631 implements FeeProvider {
+        C03631() {
+        }
+
+        public Value getFeeValue(CoinType type) {
+            return WalletApplication.this.config.getFeeValue(type);
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -168,10 +180,26 @@ public class WalletApplication extends Application {
     }
 
     public ShapeShift getShapeShift() {
-        if (shapeShift == null) {
-            shapeShift = new ShapeShift(NetworkUtils.getHttpClient(getApplicationContext()));
-        } this.shapeShift.setApiPublicKey("66acba9c39b3d176196f6923e79b6ccf976039001fe2ca1283d2300c7fec34e6775a580436d55d8382e46133d610d3ce1bb31b5558e67b8e743a834d57bb7dd1");
-        return shapeShift;
+        return getShapeShift(null);
+    }
+
+    public ShapeShift getShapeShift(String exchange) {
+        if (exchange == null) {
+            exchange = "shapeshift";
+        }
+        if (!this.exchanges.containsKey(exchange)) {
+            ShapeShift shapeShift = new ShapeShift(NetworkUtils.getHttpClient(getApplicationContext()), exchange);
+            shapeShift.setApiPublicKey("66acba9c39b3d176196f6923e79b6ccf976039001fe2ca1283d2300c7fec34e6775a580436d55d8382e46133d610d3ce1bb31b5558e67b8e743a834d57bb7dd1");
+            this.exchanges.put(exchange, shapeShift);
+        }
+        return (ShapeShift) this.exchanges.get(exchange);
+    }
+
+    public TokenSaleProxy getTokenSaleProxy() {
+        if (this.tokenSaleProxy == null) {
+            this.tokenSaleProxy = new TokenSaleProxy(NetworkUtils.getHttpClient(getApplicationContext()));
+        }
+        return this.tokenSaleProxy;
     }
 
     public File getTxCachePath() {

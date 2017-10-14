@@ -24,6 +24,8 @@ import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
@@ -127,10 +129,11 @@ public class UiUtils {
     }
 
     public static ActionMode startAccountActionMode(final WalletAccount account,
+                                                    final ERC20Token token,
                                                     final Activity activity,
                                                     final FragmentManager fragmentManager) {
         return startActionMode(activity,
-                new AccountActionModeCallback(account, activity, fragmentManager));
+                new AccountActionModeCallback(account, activity, token, fragmentManager));
     }
 
     public static class AddressActionModeCallback implements ActionMode.Callback {
@@ -225,12 +228,37 @@ public class UiUtils {
         private final WalletAccount account;
         private final Activity activity;
         private final FragmentManager fragmentManager;
+        private final ERC20Token token;
+
+        class C05591 implements DialogInterface.OnClickListener {
+            C05591() {
+            }
+
+            public void onClick(DialogInterface dialog, int which) {
+                Wallet wallet = AccountActionModeCallback.this.account.getWallet();
+                if (wallet != null) {
+                    if (AccountActionModeCallback.this.token == null || !(AccountActionModeCallback.this.account instanceof EthFamilyWallet)) {
+                        if (AccountActionModeCallback.this.account instanceof EthFamilyWallet) {
+                            ((EthFamilyWallet) AccountActionModeCallback.this.account).getERC20Favorites().clear();
+                        }
+                        wallet.deleteAccount(AccountActionModeCallback.this.account.getId());
+                    } else {
+           //             ((EthFamilyWallet) AccountActionModeCallback.this.account).removeFromFavorites(AccountActionModeCallback.this.token);
+                    }
+                }
+                if (AccountActionModeCallback.this.activity instanceof EditAccountFragment.Listener) {
+                    ((EditAccountFragment.Listener) AccountActionModeCallback.this.activity).onAccountModified(AccountActionModeCallback.this.account);
+                }
+            }
+        }
 
         public AccountActionModeCallback(final WalletAccount account,
                                          final Activity activity,
+                                         final ERC20Token token,
                                          final FragmentManager fragmentManager) {
             this.account = account;
             this.activity = activity;
+            this.token = token;
             this.fragmentManager = fragmentManager;
         }
 

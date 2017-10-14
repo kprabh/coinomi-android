@@ -4,6 +4,7 @@ import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.families.eth.EthAddress;
+import com.coinomi.core.wallet.families.eth.EthContract;
 
 public class EthFamily extends CoinType {
     public EthFamily() {
@@ -13,5 +14,9 @@ public class EthFamily extends CoinType {
 
     public AbstractAddress newAddress(String addressStr) throws AddressMalformedException {
         return new EthAddress(this, addressStr);
+    }
+
+    public static String generateSubTypeId(EthContract contract) {
+        return CoinType.generateSubTypeId(contract.getContractAddress(), contract.getCoinType());
     }
 }

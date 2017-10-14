@@ -28,14 +28,17 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * @author John L. Jegutanis
  */
 abstract public class CoinType extends AbstractBitcoinNetParams implements ValueType, Serializable {
-
+    private static int[] EMPTY_HEADERS = new int[0];
     protected String[] altSymbols;
     protected boolean hasDynamicFees;
     protected boolean hasSelectableFees;
+    protected String icon;
     protected Value minFeeValue;
     private transient Value zeroCoin;
+    protected CoinType parentType;
+    protected int[] p2shHeaderExtras;
 
-    public static class DummyNetParams extends AbstractBitcoinNetParams {
+    private static class DummyNetParams extends AbstractBitcoinNetParams {
         private static DummyNetParams instance = new DummyNetParams();
 
         public static synchronized DummyNetParams get() {
@@ -56,6 +59,7 @@ abstract public class CoinType extends AbstractBitcoinNetParams implements Value
     }
 
     public CoinType() {
+        this.parentType = null;
         this.altSymbols = new String[0];
         this.hasDynamicFees = false;
         this.hasSelectableFees = false;
@@ -146,7 +150,7 @@ abstract public class CoinType extends AbstractBitcoinNetParams implements Value
     }
 
     public String getUriScheme() {
-        return checkNotNull(uriScheme, "A coin failed to set a URI scheme");
+        return checkNotNull(uriScheme, "A coin failed to set a URI scheme").toLowerCase();
     }
 
     public int getBip44Index() {
@@ -318,5 +322,32 @@ abstract public class CoinType extends AbstractBitcoinNetParams implements Value
 
     public interface FeeProvider {
         Value getFeeValue(CoinType type);
+    }
+
+    public String getIcon() {
+        return this.icon;
+    }
+
+    public static String generateSubTypeId(String subTypeHash, CoinType parent) {
+        return subTypeHash + "." + parent.getId();
+    }
+
+    public boolean isSubType() {
+        return this.parentType != null;
+    }
+
+    public CoinType getParentType() {
+        return this.parentType;
+    }
+
+    public boolean isFavorite() {
+        return false;
+    }
+
+    public int[] getP2SHHeaderExtras() {
+        if (this.p2shHeaderExtras == null) {
+            return EMPTY_HEADERS;
+        }
+        return this.p2shHeaderExtras;
     }
 }

@@ -34,6 +34,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:paddingTop="2dp"
+                android:id="@+id/trade_info_rates"
                 android:gravity="bottom"
                 android:text="@string/trade_info_rates" />
 
@@ -98,7 +99,24 @@
                         tools:text="@string/trade_warn_no_account_found" />
                 </LinearLayout>
             </LinearLayout>
-
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+                <Button
+                    android:id="@+id/use_all_funds"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_empty_wallet"
+                    android:layout_alignParentLeft="true"
+                    style="@style/BorderlessButtonLink" />
+                <Button
+                    android:id="@+id/precise"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/action_precise"
+                    android:layout_alignParentRight="true"
+                    style="@style/BorderlessButtonLink" />
+            </RelativeLayout>
 
             <TextView
                 android:id="@+id/amount_to_send_label"
@@ -206,12 +224,13 @@
             android:gravity="bottom">
 
             <include
-                layout="@layout/powered_by_shapeshift"
+                layout="@layout/powered_by"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignBottom="@id/button_next"
                 android:layout_alignParentLeft="true"
-                android:layout_alignParentStart="true" />
+                android:layout_alignParentStart="true"
+                />
 
             <Button
                 android:id="@+id/button_next"

@@ -25,6 +25,7 @@ import android.text.Spannable;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 
+import com.coinomi.core.coins.BitcoinMain;
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.families.EthFamily;
@@ -64,7 +65,10 @@ import static com.coinomi.core.Preconditions.checkState;
  */
 public class WalletUtils {
     public static int getIconRes(CoinType type) {
-        return Constants.COINS_ICONS.get(type);
+        if (Constants.COINS_ICONS.containsKey(type)) {
+            return Constants.COINS_ICONS.get(type);
+        }
+        return Constants.COINS_ICONS.get(BitcoinMain.get());
     }
 
     public static int getIconRes(WalletAccount account) {

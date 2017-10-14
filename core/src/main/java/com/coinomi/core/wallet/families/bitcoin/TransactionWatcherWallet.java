@@ -443,6 +443,16 @@ abstract public class TransactionWatcherWallet extends AbstractWallet<BitTransac
         }
     }
 
+    public List<BitTransaction> getTransactionList() {
+        this.lock.lock();
+        try {
+            List<BitTransaction> copyOf = ImmutableList.copyOf(this.rawTransactions.values());
+            return copyOf;
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
     /**
      * Deletes transactions which appeared above the given block height from the wallet, but does not touch the keys.
      * This is useful if you have some keys and wish to replay the block chain into the wallet in order to pick them up.

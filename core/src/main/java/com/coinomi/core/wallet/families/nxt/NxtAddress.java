@@ -85,14 +85,13 @@ final public class NxtAddress implements AbstractAddress {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(AbstractAddress o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (o == null || getClass() != o.getClass() || !this.type.equals(o.getType())) return false;
 
         NxtAddress that = (NxtAddress) o;
 
         if (accountId != that.accountId) return false;
-        if (!type.equals(that.type)) return false;
 
         return true;
     }

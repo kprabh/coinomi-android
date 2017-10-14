@@ -1,12 +1,16 @@
 package com.coinomi.core.wallet.families.eth;
 
 import com.coinomi.core.Preconditions;
+import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.eth.CallTransaction;
 import com.coinomi.core.coins.eth.Transaction;
+import com.coinomi.core.exceptions.AddressMalformedException;
+import com.coinomi.core.exceptions.ExecutionException;
 import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.exceptions.TransactionBroadcastException;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.network.AddressStatus;
 import com.coinomi.core.network.BlockHeader;
 import com.coinomi.core.network.EthServerClient;
@@ -22,6 +26,7 @@ import com.coinomi.core.wallet.AccountContractEventListener;
 import com.coinomi.core.wallet.SendRequest;
 import com.coinomi.core.wallet.SignedMessage;
 import com.coinomi.core.wallet.Wallet;
+import com.coinomi.core.wallet.WalletAccount.WalletAccountException;
 import com.coinomi.core.wallet.WalletAccountEventListener;
 import com.coinomi.core.wallet.WalletConnectivityStatus;
 import com.google.common.collect.ImmutableList;
@@ -37,6 +42,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
@@ -71,10 +77,13 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
     File dbAccountFolder;
     HTreeMap<String, String> dbBalance;
     HTreeMap<String, String> dbContracts;
+    Set<String> dbFavorites;
     File dbFile;
     HTreeMap<String, byte[]> dbHeight;
     HTreeMap<String, String> dbTransactions;
+    protected final ConcurrentHashMap<String, ERC20Token> erc20Tokens;
     protected final ConcurrentHashMap<String, EthContract> ethContracts;
+    protected final ConcurrentHashMap<String, ERC20Token> favoritesERC20Tokens;
     EthFamilyKey keys;
     private Integer lastBlockSeenHeight;
     private Long lastBlockSeenTimeSecs;
@@ -83,6 +92,18 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
     protected final ConcurrentHashMap<Sha256Hash, EthTransaction> pendingTransactions;
     protected final ConcurrentHashMap<Sha256Hash, EthTransaction> rawTransactions;
     private boolean subscribed;
+
+    class C03558 extends ArrayList<CoinType> {
+        C03558() {
+            addAll(EthFamilyWallet.this.erc20Tokens.values());
+        }
+    }
+
+    class C03569 extends ArrayList<CoinType> {
+        C03569() {
+            addAll(EthFamilyWallet.this.favoritesERC20Tokens.values());
+        }
+    }
 
     public int getLastBlockSeenHeight() {
         return this.lastBlockSeenHeight.intValue();
@@ -108,8 +129,14 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         this.addressesStatus = new HashMap();
         this.listeners = new CopyOnWriteArrayList();
         this.contractListeners = new ConcurrentHashMap();
-        this.address = new EthAddress(type, Hex.toHexString(this.keys.getAddress()));
-        this.ethContracts = new ConcurrentHashMap();
+        try {
+            this.address = new EthAddress(type, Hex.toHexString(this.keys.getAddress()));
+            this.ethContracts = new ConcurrentHashMap();
+            this.erc20Tokens = new ConcurrentHashMap();
+            this.favoritesERC20Tokens = new ConcurrentHashMap();
+        } catch (AddressMalformedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public EthFamilyWallet(String id, EthFamilyKey keys, CoinType coinType) {
@@ -124,12 +151,26 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         this.addressesStatus = new HashMap();
         this.listeners = new CopyOnWriteArrayList();
         this.contractListeners = new ConcurrentHashMap();
-        this.address = new EthAddress(this.type, Hex.toHexString(keys.getAddress()));
-        this.ethContracts = new ConcurrentHashMap();
+        try {
+            this.address = new EthAddress(this.type, Hex.toHexString(keys.getAddress()));
+            this.ethContracts = new ConcurrentHashMap();
+            this.erc20Tokens = new ConcurrentHashMap();
+            this.favoritesERC20Tokens = new ConcurrentHashMap();
+        } catch (AddressMalformedException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public EthFamilyWallet(EthFamilyKey keys, CoinType type) {
         this(KeyUtils.getPublicKeyId(type, keys.getPublicKey()), keys, type);
+    }
+
+    public CoinType getCoinType(String coinId) throws UnsupportedCoinTypeException {
+        CoinType otherType = CoinID.typeFromId(coinId);
+        if ((otherType instanceof ERC20Token) && this.erc20Tokens.containsKey(((ERC20Token) otherType).getAddress())) {
+            return (CoinType) this.erc20Tokens.get(((ERC20Token) otherType).getAddress());
+        }
+        throw new UnsupportedCoinTypeException("Wallet with type " + this.type.getId() + " does not support type" + otherType.getId());
     }
 
     public byte[] getPublicKey() {
@@ -165,6 +206,20 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         return this.balance;
     }
 
+    public Value getBalance(CoinType otherType) throws UnsupportedCoinTypeException {
+        if (this.type.equals(otherType)) {
+            return getBalance();
+        }
+        if (otherType instanceof ERC20Token) {
+            try {
+                return ((ERC20Token) otherType).getBalance(this);
+            } catch (Exception e) {
+                throw new UnsupportedCoinTypeException(e);
+            }
+        }
+        throw new UnsupportedCoinTypeException("Wallet with id " + getId() + " does not support type" + otherType.getId());
+    }
+
     public boolean isStandardPath() {
         return false;
     }
@@ -196,20 +251,24 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         }
     }
 
-    public AbstractAddress getChangeAddress() {
+    public EthAddress getAddress() {
         return this.address;
+    }
+
+    public AbstractAddress getChangeAddress() {
+        return getAddress();
     }
 
     public AbstractAddress getReceiveAddress() {
-        return this.address;
+        return getAddress();
     }
 
     public AbstractAddress getRefundAddress(boolean isManualAddressManagement) {
-        return this.address;
+        return getAddress();
     }
 
     public AbstractAddress getReceiveAddress(boolean isManualAddressManagement) {
-        return this.address;
+        return getAddress();
     }
 
     public boolean hasUsedAddresses() {
@@ -265,6 +324,56 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         }
     }
 
+    public List<EthTransaction> getTransactionList() {
+        this.lock.lock();
+        try {
+            List<EthTransaction> copyOf = ImmutableList.copyOf(this.rawTransactions.values());
+            return copyOf;
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+    public List<AbstractTransaction> getTransactionList(CoinType otherType) throws UnsupportedCoinTypeException {
+        this.lock.lock();
+        List<AbstractTransaction> build;
+        try {
+            Builder<AbstractTransaction> builder;
+            if (this.type.equals(otherType)) {
+                builder = ImmutableList.builder();
+                for (AbstractTransaction tx : this.rawTransactions.values()) {
+                    builder.add(tx);
+                }
+                build = builder.build();
+                return build;
+            } else if (otherType instanceof ERC20Token) {
+                this.lock.lock();
+                EthContract contract = (EthContract) this.ethContracts.get(((ERC20Token) otherType).getAddress());
+                if (contract == null) {
+                    throw new UnsupportedCoinTypeException("No contract available for type " + otherType.getId() + " in wallet id " + getId());
+                }
+                builder = ImmutableList.builder();
+                for (EthTransaction tx2 : this.rawTransactions.values()) {
+                    if (contract.isMineTx(tx2)) {
+                        builder.add(new ERC20Transaction(tx2, otherType, this));
+                    }
+                }
+                build = builder.build();
+                this.lock.unlock();
+                return build;
+            } else {
+                throw new UnsupportedCoinTypeException("Wallet with id " + getId() + " does not support type" + otherType.getId());
+            }
+        } catch (Throwable th) {
+
+            return null;
+        } finally {
+            this.lock.unlock();
+        }
+    }
+
+
+
     public List<AbstractAddress> getActiveAddresses() {
         return ImmutableList.of((AbstractAddress)this.address);
     }
@@ -296,7 +405,7 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
 
     public synchronized DB getDb() {
         if (this.db == null || this.db.isClosed()) {
-            this.db = DBMaker.newFileDB((File) Preconditions.checkNotNull(this.dbFile)).closeOnJvmShutdown().make();
+            this.db = DBMaker.newFileDB((File) Preconditions.checkNotNull(this.dbFile)).mmapFileEnableIfSupported().closeOnJvmShutdown().make();
         }
         return this.db;
     }
@@ -327,6 +436,13 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
             this.dbContracts = getDb().createHashMap("contracts_map").keySerializer(Serializer.STRING).valueSerializer(Serializer.STRING).makeOrGet();
         }
         return this.dbContracts;
+    }
+
+    public synchronized Set<String> getDbFavorites() {
+        if (this.dbFavorites == null) {
+            this.dbFavorites = getDb().createHashSet("favorite_contracts").serializer(Serializer.STRING).makeOrGet();
+        }
+        return this.dbFavorites;
     }
 
     public void initDb(File dbPath) throws Exception {
@@ -401,8 +517,8 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
 
     private void deleteDB() {
         closeDb();
-        if (this.dbAccountFolder.exists()) {
-            deleteRecursive(this.dbAccountFolder);
+        if (this.dbFile.exists()) {
+            deleteRecursive(this.dbFile);
             log.debug("Deleted corrupted db file");
         }
     }
@@ -692,8 +808,13 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
     }
 
     private void storeBalance() {
+        this.lock.lock();
+        try {
         getDbBalance().put(this.address.toString(), this.balance.getBigInt().toString(16));
         getDb().commit();
+        } finally {
+            this.lock.unlock();
+        }
     }
 
     void commitAddressStatus(AddressStatus newStatus) {
@@ -788,9 +909,15 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
                     }
                 });
             }
-        } finally {
+            if (this.favoritesERC20Tokens.containsKey(tx.to.toString())) {
+                EthContract.executeFunction(this, ((ERC20Token) this.favoritesERC20Tokens.get(tx.to.toString())).getAddress(), "balanceOf", "0", new String[]{getReceiveAddress().toString()});
+            }
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+        } catch (Throwable th) {
             this.lock.unlock();
         }
+        this.lock.unlock();
     }
 
     public BigInteger getNonce() {
@@ -825,7 +952,13 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
     public Map<String, EthContract> getAllContracts() {
         return this.ethContracts;
     }
+    public Map<String, ERC20Token> getAllERC20Tokens() {
+        return this.erc20Tokens;
+    }
 
+    public Map<String, ERC20Token> getERC20Favorites() {
+        return this.favoritesERC20Tokens;
+    }
     public void addContractEventListener(String contractId, AccountContractEventListener listener) {
         addContractEventListener(contractId, listener, Threading.THREAD_POOL);
     }
@@ -901,10 +1034,10 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
         }
     }
 
-    public void callContractFunction(String contractId, String functionName, List<String> inputValues, Value amount) {
+    public void callContractFunction(String contractId, String functionName, Value amount, Object... inputValues) {
         EthContract contract = (EthContract) this.ethContracts.get(contractId);
         JSONObject ethCall = new JSONObject();
-        Transaction tx = CallTransaction.createCallTransaction(0, 1, 1000000, contract.getContractAddress().replace("0x", ""), 0, contract.getContract().getByName(functionName), inputValues.toArray());
+        Transaction tx = CallTransaction.createCallTransaction(0, 1, 1000000, contract.getContractAddress().replace("0x", ""), 0, contract.getContract().getByName(functionName), inputValues);
         try {
             ethCall.put("from", this.address.toString());
             ethCall.put("to", contractId);
@@ -925,16 +1058,49 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
             contract.setHistory(((EthContract) this.ethContracts.get(contract.getContractAddress())).getAllHistory());
         } else {
             this.ethContracts.put(contract.getContractAddress(), contract);
+            if (contract.isContractType("erc20")) {
+                try {
+                    if (this.erc20Tokens.containsKey(contract.getContractAddress())) {
+                        ((ERC20Token) this.erc20Tokens.get(contract.getContractAddress())).update(contract);
+                    } else {
+                        ERC20Token t = ERC20Token.getERCToken(contract);
+                        if (t != null) {
+                            this.erc20Tokens.put(contract.getContractAddress(), t);
+                        } else {
+                            log.warn("Could not convert to ERC20Token the contract " + contract.getContractAddress());
+                        }
+                    }
+                } catch (Throwable e) {
+                    log.error("Error while processing ERC20Token", e);
+                }
+            }
+            storeContractToDB(contract);
         }
-        storeContractToDB(contract);
+    }
+
+    public void updateContract(JSONObject contract) {
+        if (contract.has("address")) {
+            try {
+                ((EthContract) this.ethContracts.get(contract.getString("address"))).update(contract);
+            } catch (Throwable e) {
+                log.error("Error while parsing contract ", e);
+            }
+        }
     }
 
     private void storeContractToDB(EthContract contract) {
+        this.lock.lock();
         try {
+            if (getDbContracts().containsKey(contract.getContractAddress())) {
+                getDbContracts().replace(contract.getContractAddress(), contract.toJSON().toString());
+            } else {
             getDbContracts().put(contract.getContractAddress(), contract.toJSON().toString());
+            }
             getDb().commit();
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            this.lock.unlock();
         }
     }
 
@@ -944,5 +1110,29 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
 
     public ImmutableList<ChildNumber> getDeterministicRootKeyPath() {
         return this.keys.getRootKey().getPath();
+    }
+
+    public List<CoinType> availableSubTypes() {
+        return new C03558();
+    }
+
+    public List<CoinType> favoriteSubTypes() {
+        return new C03569();
+    }
+
+    public EthContract getContract(ERC20Token type) {
+        return getContract(type.getAddress());
+    }
+
+    public EthContract getContract(String contractAddress) {
+        return (EthContract) getAllContracts().get(contractAddress);
+    }
+
+    public EthContract getContract(EthAddress address) {
+        return getContract(address.toString());
+    }
+
+    public boolean isFavorite(CoinType subType) {
+        return (subType instanceof ERC20Token) && getERC20Favorites().containsKey(((ERC20Token) subType).getAddress());
     }
 }

@@ -137,7 +137,9 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
                     newTransactionMessage(obj);
                 } else if (obj.getString("msg").equals("contract_event")) {
                     newContractMessage(obj);
-                } else if (obj.getString("msg").equals("contract_template")) {
+                } else if (obj.getString("msg").equals("contract_update")) {
+                    updateContractMessage(obj);
+                }  else if (obj.getString("msg").equals("contract_template")) {
                     newContractTemplate(obj);
                 }
             }
@@ -155,6 +157,13 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
                 log.error("error parsing contract event");
                 e.printStackTrace();
             }
+        }
+    }
+
+    private void updateContractMessage(JSONObject obj) {
+        if (obj.has("address")) {
+            log.info("update contract event");
+            ((EthFamilyWallet) this.account).updateContract(obj);
         }
     }
 

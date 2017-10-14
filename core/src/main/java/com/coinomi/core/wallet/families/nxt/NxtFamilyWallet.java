@@ -215,8 +215,7 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
 
     public void signTransaction(NxtSendRequest request) {
         checkArgument(request.isCompleted(), "Send request is not completed");
-        checkArgument(request.tx != null, "No transaction found in send request");
-        Transaction tx = request.tx.getRawTransaction();
+        NxtTransaction tx = (NxtTransaction) com.coinomi.core.Preconditions.checkNotNull(request.getTx());
         byte[] privateKey;
         if (rootKey.isEncrypted()) {
             checkArgument(request.aesKey != null, "Wallet is encrypted but no decryption key provided");
@@ -224,7 +223,7 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
         } else {
             privateKey = rootKey.getPrivateKey();
         }
-        tx.sign(privateKey);
+        tx.getRawTransaction().sign(privateKey);
         Arrays.fill(privateKey, (byte) 0); // clear private key
     }
 
@@ -371,6 +370,16 @@ public class NxtFamilyWallet extends AbstractWallet<NxtTransaction, NxtAddress>
             return ImmutableMap.copyOf(rawtransactions);
         } finally {
             lock.unlock();
+        }
+    }
+    @Override
+    public List<NxtTransaction> getTransactionList() {
+        this.lock.lock();
+        try {
+            List<NxtTransaction> copyOf = ImmutableList.copyOf(this.rawtransactions.values());
+            return copyOf;
+        } finally {
+            this.lock.unlock();
         }
     }
 

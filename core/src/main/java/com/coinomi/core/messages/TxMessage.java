@@ -12,7 +12,7 @@ public interface TxMessage extends Serializable {
     void serializeTo(AbstractTransaction transaction);
 
     enum Type {
-        PUBLIC, PRIVATE
+        PUBLIC, PRIVATE, INPUT_DATA
     }
 
     Type getType();

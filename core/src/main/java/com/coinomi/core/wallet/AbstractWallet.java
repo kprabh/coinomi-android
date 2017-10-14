@@ -1,15 +1,17 @@
 package com.coinomi.core.wallet;
 
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.ValueType;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.util.TypeUtils;
-import com.coinomi.core.wallet.families.bitcoin.WalletPocketHD;
-
+import com.coinomi.core.wallet.WalletAccount.WalletAccountException;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 import org.bitcoinj.crypto.HDUtils;
 import org.bitcoinj.utils.Threading;
-
-import java.lang.ref.WeakReference;
-import java.util.concurrent.locks.ReentrantLock;
 
 import javax.annotation.Nullable;
 
@@ -19,6 +21,7 @@ import javax.annotation.Nullable;
 public abstract class AbstractWallet<T extends AbstractTransaction, A extends AbstractAddress>
         implements WalletAccount<T, A> {
     protected final String id;
+    private static final List<CoinType> EMPTY_LIST = new ArrayList(0);
     protected String description;
     protected final CoinType type;
     protected final ReentrantLock lock = Threading.lock("AbstractWallet");
@@ -54,6 +57,29 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
     public CoinType getCoinType() {
         return type;
     }
+
+    public CoinType getCoinType(String coinId) throws UnsupportedCoinTypeException {
+        checkCoinId(coinId);
+        return this.type;
+    }
+
+    private void checkCoinId(String coinId) {
+        if (!this.type.getId().equals(coinId)) {
+            throw new UnsupportedCoinTypeException("Wallet with type " + this.type.getId() + " does not support type" + coinId);
+        }
+    }
+
+    public Value getBalance(CoinType type) throws UnsupportedCoinTypeException {
+        checkCoinId(type.getId());
+        return getBalance();
+    }
+
+    @Override
+    public List<AbstractTransaction> getTransactionList(CoinType type) throws UnsupportedCoinTypeException {
+        checkCoinId(type.getId());
+        return (List<AbstractTransaction>)getTransactionList();
+    }
+
     public void setWallet(Wallet wallet) {
         this.lock.lock();
         if (wallet != null) {
@@ -99,7 +125,7 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
     }
 
     /**
-     * Get the description of the wallet. See {@link WalletPocketHD#setDescription(String))}
+     * Get the description of the wallet. See
      */
     @Override
     @Nullable
@@ -167,5 +193,13 @@ public abstract class AbstractWallet<T extends AbstractTransaction, A extends Ab
         return other != null &&
                 getId().equals(other.getId()) &&
                 getCoinType().equals(other.getCoinType());
+    }
+
+    public List<CoinType> availableSubTypes() {
+        return EMPTY_LIST;
+    }
+
+    public List<CoinType> favoriteSubTypes() {
+        return EMPTY_LIST;
     }
 }

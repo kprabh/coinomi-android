@@ -53,7 +53,7 @@ import com.coinomi.core.network.CoinAddress;
 import com.coinomi.stratumj.ServerAddress;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
+import com.coinomi.core.coins.EthereumMain;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -220,7 +220,8 @@ public class Constants {
             new CoinAddress(VoxelsMain.get(),       new ServerAddress("voxels-1.crypto-expert.com", 5048),
                                                     new ServerAddress("voxels-2.crypto-expert.com", 5048)),
             new CoinAddress(SilkcoinMain.get(),     new ServerAddress("silkcoin-1.crypto-expert.com", 5049),
-                                                    new ServerAddress("silkcoin-2.crypto-expert.com", 5049))
+                                                    new ServerAddress("silkcoin-2.crypto-expert.com", 5049)),
+            new CoinAddress(EthereumMain.get(),     new ServerAddress("eth-cce-1.coinomi.net", 5051, "ethereum"), new ServerAddress("eth-cce-2.coinomi.net", 5051, "ethereum"))
 
     );
 
@@ -273,6 +274,7 @@ public class Constants {
         COINS_ICONS.put(CoinID.IXCOIN_MAIN.getCoinType(), R.drawable.ixcoin);
 	COINS_ICONS.put(CoinID.VOXELS_MAIN.getCoinType(), R.drawable.voxels);
 	COINS_ICONS.put(CoinID.SILKCOIN_MAIN.getCoinType(), R.drawable.silkcoin);
+        COINS_ICONS.put(CoinID.ETHEREUM_MAIN.getCoinType(), Integer.valueOf(R.drawable.ethereum));
 
         COINS_BLOCK_EXPLORERS = new HashMap<CoinType, String>();
         COINS_BLOCK_EXPLORERS.put(CoinID.BITCOIN_MAIN.getCoinType(), "https://blockchain.info/tx/%s");
@@ -315,6 +317,7 @@ public class Constants {
         COINS_BLOCK_EXPLORERS.put(CoinID.EGULDEN_MAIN.getCoinType(), "https://chainz.cryptoid.info/efl/tx.dws?%s");
         COINS_BLOCK_EXPLORERS.put(CoinID.RICHCOIN_MAIN.getCoinType(), "https://explorer.richcoin.us/transaction?transaction=%s");
         COINS_BLOCK_EXPLORERS.put(CoinID.IXCOIN_MAIN.getCoinType(), "https://chainz.cryptoid.info/ixc/tx.dws?%s");
+        COINS_BLOCK_EXPLORERS.put(CoinID.ETHEREUM_MAIN.getCoinType(), "https://etherscan.io/tx/0x%s");
     }
 
     public static final CoinType DEFAULT_COIN = BitcoinMain.get();
@@ -368,6 +371,7 @@ public class Constants {
             BitcoinTest.get(),
             LitecoinTest.get(),
             DogecoinTest.get(),
+            EthereumMain.get(),
 	    VoxelsMain.get(),
 	    SilkcoinMain.get()
     );

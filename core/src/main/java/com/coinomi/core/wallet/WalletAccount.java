@@ -5,9 +5,13 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.ValueType;
 import com.coinomi.core.exceptions.ResetKeyException;
 import com.coinomi.core.exceptions.TransactionBroadcastException;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.network.interfaces.ConnectionEventListener;
 import com.google.common.collect.ImmutableList;
-
+import java.io.Serializable;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executor;
 import org.bitcoinj.core.Sha256Hash;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
@@ -16,10 +20,6 @@ import org.bitcoinj.wallet.KeyBag;
 
 import org.spongycastle.crypto.params.KeyParameter;
 
-import java.io.Serializable;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executor;
 
 import javax.annotation.Nullable;
 
@@ -51,7 +51,8 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
     Value getBalance();
     boolean isStandardPath();
     void refresh();
-
+    List<CoinType> availableSubTypes();
+    List<CoinType> favoriteSubTypes();
     boolean isConnected();
     boolean isLoading();
     void disconnect();
@@ -69,7 +70,8 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
     DeterministicKey getDeterministicRootKey() throws UnsupportedOperationException;
 
     ImmutableList<ChildNumber> getDeterministicRootKeyPath();
-
+    Value getBalance(CoinType coinType) throws UnsupportedCoinTypeException;
+    CoinType getCoinType(String str) throws UnsupportedCoinTypeException;
     /**
      * Get current refund address, does not mark it as used.
      *
@@ -98,6 +100,10 @@ public interface WalletAccount<T extends AbstractTransaction, A extends Abstract
     T getTransaction(String transactionId);
     Map<Sha256Hash, T> getPendingTransactions();
     Map<Sha256Hash, T> getTransactions();
+
+    List<T> getTransactionList();
+
+    List<AbstractTransaction> getTransactionList(CoinType coinType) throws UnsupportedCoinTypeException;
 
     List<AbstractAddress> getActiveAddresses();
     void markAddressAsUsed(AbstractAddress address);

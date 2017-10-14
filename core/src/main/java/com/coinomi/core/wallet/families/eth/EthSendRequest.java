@@ -42,7 +42,7 @@ public class EthSendRequest extends SendRequest<EthTransaction, EthAddress> {
             Preconditions.checkState(t.equals(req.type));
         }
         req.walletFullBalance = from.getBalance();
-        req.setTransaction(new EthTransaction(destination.getType(), Transaction.create(destination.getHexString(), amount.getBigInt(), getNonce(from), req.feePerTxSize.getBigInt(), BigInteger.ZERO, contractData), from.getReceiveAddress().toString()));
+        req.setTransaction(new EthTransaction(from.getAddress(), destination, amount, getNonce(from), req.feePerTxSize, BigInteger.ZERO, contractData));
         req.setCompleted(true);
         return req;
     }
@@ -76,28 +76,28 @@ public class EthSendRequest extends SendRequest<EthTransaction, EthAddress> {
         if (tx.getData() != null) {
             data = Hex.decode(tx.getData());
         }
-        BigInteger gasPrice = this.feePerTxSize.getBigInt();
-        Value newFees = this.type.value(newGas.multiply(gasPrice));
+        Value gasPrice = this.feePerTxSize;
+        Value newFees = gasPrice.multiply(newGas);
         if (this.emptyWallet) {
             v = this.walletFullBalance.subtract(newFees);
             if (v.signum() < 0) {
                 throw new WalletAccountException(new InsufficientMoneyException(v.negate()));
             }
         }
-        v = this.type.value(tx.value);
+        v = tx.value;
         Value remaining = this.walletFullBalance.subtract(v.add(newFees));
         if (remaining.signum() < 0) {
             throw new WalletAccountException(new InsufficientMoneyException(remaining.negate()));
         }
-        setTransaction(new EthTransaction(this.type, Transaction.create(tx.to, v.getBigInt(), tx.nonce, gasPrice, newGas, data), tx.from));
+        setTransaction(new EthTransaction(tx.from, tx.to, v, tx.nonce, gasPrice, newGas, data));
     }
 
     public JSONObject getJsonDetails() throws JSONException {
         EthTransaction tx = (EthTransaction) com.google.common.base.Preconditions.checkNotNull(getTx());
         JSONObject details = new JSONObject();
-        details.put("from", tx.getReceivedFrom().get(0));
-        details.put("to", ((AbstractOutput) tx.getSentTo().get(0)).getAddress());
-        details.put("value", tx.getValueRaw().toString(16));
+        details.put("from", tx.from);
+        details.put("to", tx.to);
+        details.put("value", tx.getValueHex());
         if (tx.getData() != null) {
             details.put("data", tx.getData());
         }

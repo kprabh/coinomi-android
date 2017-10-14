@@ -6,9 +6,11 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.eth.CallTransaction.Function;
 import com.coinomi.core.coins.eth.Transaction;
 import com.coinomi.core.coins.eth.crypto.SHA3Helper;
+import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
+import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.google.common.collect.ImmutableList;
 import java.math.BigInteger;
@@ -27,31 +29,37 @@ public class EthTransaction implements AbstractTransaction {
     BigInteger blockNumber;
     BigInteger cumulativeGasUsed;
     int depth;
-    String from;
+    EthAddress from;
     BigInteger gasLimit;
-    BigInteger gasPrice;
+    Value gasPrice;
     BigInteger gasUsed;
     String hash;
     String input;
     JSONArray logs;
     BigInteger nonce;
     Long timestamp;
-    String to;
+    EthAddress to;
     BigInteger transactionIndex;
     final Transaction tx;
     final JSONObject txJson;
     final CoinType type;
-    BigInteger value;
+    Value value;
 
-    public EthTransaction(CoinType type, Transaction transaction, String sender) {
-        this.type = type;
-        this.tx = (Transaction) Preconditions.checkNotNull(transaction);
-        this.gasLimit = this.tx.getGasLimit().length > 0 ? BigIntegers.fromUnsignedByteArray(this.tx.getGasLimit()) : BigInteger.ZERO;
-        this.value = this.tx.getValue().length > 0 ? BigIntegers.fromUnsignedByteArray(this.tx.getValue()) : BigInteger.ZERO;
-        this.nonce = this.tx.getNonce().length > 0 ? BigIntegers.fromUnsignedByteArray(this.tx.getNonce()) : BigInteger.ZERO;
-        this.gasPrice = BigIntegers.fromUnsignedByteArray(this.tx.getGasPrice());
-        this.to = Hex.toHexString(this.tx.getReceiveAddress());
-        this.from = sender;
+    public EthTransaction(EthAddress from, EthAddress to, Value amount, BigInteger nonce, Value gasPrice, BigInteger gasLimit, byte[] data) {
+        Preconditions.checkState(to.getType().equals(from.getType()));
+        this.to = to;
+        this.from = from;
+        CoinType t = from.getType();
+        if (t.isSubType()) {
+            this.type = t.getParentType();
+        } else {
+            this.type = t;
+        }
+        this.gasLimit = gasLimit;
+        this.value = amount;
+        this.nonce = nonce;
+        this.gasPrice = gasPrice;
+        this.tx = Transaction.create(to.getHexString(), amount.getBigInt(), nonce, gasPrice.getBigInt(), gasLimit, data);
         this.txJson = new JSONObject();
         this.logs = new JSONArray();
     }
@@ -65,14 +73,15 @@ public class EthTransaction implements AbstractTransaction {
             this.blockNumber = new BigInteger(txJson.getString("blockNumber"));
             this.transactionIndex = new BigInteger(txJson.getString("transactionIndex").replace("0x", ""), 16);
         }
-        this.to = txJson.getString("to").replace("0x", "");
-        this.from = txJson.getString("from").replace("0x", "");
+        try {
+            this.to = new EthAddress(type, txJson.getString("to"));
+            this.from = new EthAddress(type, txJson.getString("from"));
         this.hash = txJson.getString("hash").replace("0x", "");
         this.input = txJson.getString("input").replace("0x", "");
         this.gasLimit = new BigInteger(txJson.getString("gas").replace("0x", ""), 16);
         this.nonce = new BigInteger(txJson.getString("nonce").replace("0x", ""), 16);
-        this.value = new BigInteger(txJson.getString("value").replace("0x", ""), 16);
-        this.gasPrice = new BigInteger(txJson.getString("gasPrice").replace("0x", ""), 16);
+            this.value = type.value(new BigInteger(txJson.getString("value").replace("0x", ""), 16));
+            this.gasPrice = type.value(new BigInteger(txJson.getString("gasPrice").replace("0x", ""), 16));
         if (txJson.has("cumulativeGasUsed")) {
             this.cumulativeGasUsed = new BigInteger(txJson.getString("cumulativeGasUsed").replace("0x", ""), 16);
         }
@@ -85,6 +94,9 @@ public class EthTransaction implements AbstractTransaction {
             this.logs = new JSONArray();
         }
         this.tx = null;
+        } catch (AddressMalformedException e) {
+            throw new JSONException(e);
+        }
     }
 
     public static EthTransaction fromJSON(CoinType type, String jsonString) throws JSONException {
@@ -138,14 +150,20 @@ public class EthTransaction implements AbstractTransaction {
 
     }
 
-    public JSONObject getLogs(EthFamilyWallet pocket) {
-        JSONObject obj = new JSONObject();
+    public boolean hasLogs() {
+        return this.logs.length() > 0;
+    }
+
+    public JSONArray getLogs(EthFamilyWallet pocket) {
+        JSONArray logsArray = new JSONArray();
         try {
-            if (pocket.getAllContracts().containsKey("0x" + this.to)) {
-                EthContract contract = (EthContract) pocket.getAllContracts().get("0x" + this.to);
-                if (this.logs.length() > 0) {
-                    StringBuilder logsPretify = new StringBuilder();
+            EthContract contract = pocket.getContract(this.to);
+            if (contract == null) {
+                logsArray = logsArray.put(new JSONObject().put("parsed", false).put("logs", this.logs));
+            } else if (this.logs.length() > 0) {
                     for (int j = 0; j < this.logs.length(); j++) {
+                    StringBuilder logsPretify = new StringBuilder();
+                    JSONObject obj = new JSONObject();
                         JSONObject log = this.logs.getJSONObject(j);
                         JSONArray topics = log.getJSONArray("topics");
                         Function f = contract.getContract().getByTopic(topics.getString(0).replace("0x", ""));
@@ -157,17 +175,14 @@ public class EthTransaction implements AbstractTransaction {
                             obj.put("logs", f.resultToJSON(logsPretify.toString(), f.inputs));
                             obj.put("topic", f.name);
                             obj.put("parsed", true);
+                        logsArray.put(obj);
                         }
                     }
                 }
-            } else {
-                obj.put("parsed", false);
-                obj.put("logs", this.logs);
-            }
         } catch (JSONException e) {
             e.printStackTrace();
         }
-        return obj;
+        return logsArray;
     }
 
     public String getJSONString() {
@@ -195,26 +210,30 @@ public class EthTransaction implements AbstractTransaction {
     }
 
     public Value getValue(AbstractWallet wallet) {
-        if (wallet.getReceiveAddress().toString().replace("0x", "").equals(this.to)) {
-            return Value.valueOf(wallet.getCoinType(), this.value);
+        Preconditions.checkState(this.type.equals(wallet.getCoinType()));
+        if (wallet.isAddressMine(this.to)) {
+            return this.value;
+        }
+        if (!wallet.isAddressMine(this.from)) {
+            return this.type.zeroCoin();
         }
         Value fee = getFee();
-        Value v = Value.valueOf(wallet.getCoinType(), this.value.negate());
+        Value v = this.value.negate();
         if (fee != null) {
             return v.subtract(fee);
         }
         return v;
     }
 
-    public BigInteger getValueRaw() {
-        return this.value;
+    String getValueHex() {
+        return "0x" + this.value.getBigInt().toString(16);
     }
 
     public Value getFee() {
         if (this.gasUsed != null) {
-            return Value.valueOf(this.type, this.gasUsed.multiply(this.gasPrice));
+            return this.gasPrice.multiply(this.gasUsed);
         }
-        return Value.valueOf(this.type, this.gasLimit.multiply(this.gasPrice));
+        return this.gasPrice.multiply(this.gasLimit);
     }
 
     public TxMessage getMessage() {
@@ -222,11 +241,11 @@ public class EthTransaction implements AbstractTransaction {
     }
 
     public List<AbstractAddress> getReceivedFrom() {
-        return ImmutableList.of((AbstractAddress)new EthAddress(this.type, this.from));
+        return ImmutableList.of((AbstractAddress)this.from);
     }
 
     public List<AbstractOutput> getSentTo() {
-        return ImmutableList.of(new AbstractOutput(new EthAddress(this.type, this.to), Value.valueOf(this.type, this.value)));
+        return ImmutableList.of(new AbstractOutput(this.to, this.value));
     }
 
     public boolean isGenerated() {

@@ -166,12 +166,13 @@ public class GenericUtils {
         return sb.toString();
     }
 
+
     public static String formatValue(@Nonnull final Value value) {
-        return formatCoinValue(value.type, value, "", "-", 8, 0);
+        return formatCoinValue(value.type, value);
     }
 
     public static String formatCoinValue(@Nonnull final ValueType type, @Nonnull final Monetary value) {
-        return formatCoinValue(type, value, "", "-", 8, 0);
+        return formatCoinValue(type, value, false);
     }
 
     public static String formatCoinValue(@Nonnull final ValueType type, @Nonnull final Monetary value,
@@ -196,8 +197,10 @@ public class GenericUtils {
 
     public static String formatCoinValue(@Nonnull final ValueType type, @Nonnull final Monetary value,
                                          boolean removeFinalZeroes) {
-        return formatValue(type.getUnitExponent(), value, "", "-", 8, 0, removeFinalZeroes);
+        return formatValue(type.getMoneyFormat(), value, removeFinalZeroes);
     }
+
+
 
     private static String formatValue(final long unitExponent, @Nonnull final Monetary value,
                                       @Nonnull final String plusSign, @Nonnull final String minusSign,
@@ -274,7 +277,11 @@ public class GenericUtils {
     }
 
     public static String formatFiatValue(final Value fiat, final int precision, final int shift) {
-        return formatValue(fiat.smallestUnitExponent(), fiat, "", "-", precision, shift, false);
+        try {
+            return formatValue(fiat.type.getMoneyFormat().optionalDecimals(precision - 2), fiat, false);
+        } catch (Exception e) {
+            return fiat.toPlainString();
+        }
     }
 
     public static String formatFiatValue(Value fiat) {
@@ -287,7 +294,8 @@ public class GenericUtils {
      */
     public static List<CoinType> getPossibleTypes(String addressStr) throws AddressMalformedException {
         ImmutableList.Builder<CoinType> builder = ImmutableList.builder();
-        tryBitcoinFamilyAddresses(addressStr, builder);tryEthereumFamilyAddresses(addressStr, builder);
+        tryBitcoinFamilyAddresses(addressStr, builder);
+        tryEthereumFamilyAddresses(addressStr, builder);
         // TODO try other coin addresses
         List<CoinType> possibleTypes = builder.build();
         if (possibleTypes.size() == 0) {
@@ -297,9 +305,16 @@ public class GenericUtils {
     }
     private static void tryEthereumFamilyAddresses(String addressStr, ImmutableList.Builder<CoinType> builder) {
         if (addressStr.matches("^(0x)?[0-9a-fA-F]{40}$")) {
-            builder.add(EthereumMain.get());
-            builder.add(EthClassicMain.get());
-            builder.add(ExpanseMain.get());
+            for (CoinType type : CoinID.getSupportedCoins()) {
+                try {
+                    if (!type.isSubType() || type.isFavorite()) {
+                        type.newAddress(addressStr);
+                        builder.add(type);
+                    }
+                } catch (AddressMalformedException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
     /**
@@ -308,13 +323,10 @@ public class GenericUtils {
      * @param builder for the types list
      */
     private static void tryBitcoinFamilyAddresses(final String addressStr, ImmutableList.Builder<CoinType> builder) {
-        VersionedChecksummedBytes parsed;
         try {
-            parsed = new VersionedChecksummedBytes(20, addressStr) { };
-        } catch (AddressFormatException e) { return; }
-        int version = parsed.getVersion();
-        for (CoinType type : CoinID.getSupportedCoins()) {
-            if (type.getAcceptableAddressCodes() == null) continue;
+            int version = VersionedChecksummedBytes.getExpectedVersion(20, addressStr);
+            for (CoinType type : CoinID.getSupportedCoins()) {
+                if (type.getAcceptableAddressCodes() != null) {
             for (int addressCode : type.getAcceptableAddressCodes()) {
                 if (addressCode == version) {
                     builder.add(type);
@@ -323,9 +335,8 @@ public class GenericUtils {
             }
         }
     }
-
-    public static List<CoinType> getPossibleTypes(AbstractAddress address) throws AddressMalformedException {
-        return getPossibleTypes(address.toString());
+        } catch (AddressFormatException e) {
+        }
     }
 
     public static boolean hasMultipleTypes(AbstractAddress address) {

@@ -69,7 +69,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
         }
         Value depositAmount = depositType.value(cursor.getLong(cursor.getColumnIndexOrThrow(KEY_DEPOSIT_AMOUNT_UNIT)));
         String depositTxId = cursor.getString(cursor.getColumnIndexOrThrow(KEY_DEPOSIT_TXID));
-
+        String exchange;
         AbstractAddress withdrawAddress;
         Value withdrawAmount;
         String withdrawTxId;
@@ -85,12 +85,18 @@ public class ExchangeHistoryProvider extends ContentProvider {
             withdrawTxId = null;
         }
         try {
-            error = cursor.getString(cursor.getColumnIndexOrThrow("error"));
+            exchange = cursor.getString(cursor.getColumnIndexOrThrow("exchange"));
         } catch (Exception e4) {
+            exchange = "shapeshift";
+        }
+
+        try {
+            error = cursor.getString(cursor.getColumnIndexOrThrow("error"));
+        } catch (Exception e5) {
             error = null;
         }
         return new ExchangeEntry(status, depositAddress, depositAmount, depositTxId,
-                withdrawAddress, withdrawAmount, withdrawTxId,error);
+                withdrawAddress, withdrawAmount, withdrawTxId, exchange, error);
     }
 
 
@@ -215,7 +221,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
                 + KEY_WITHDRAW_ADDRESS + " TEXT NULL, "
                 + KEY_WITHDRAW_COIN_ID + " TEXT NULL, "
                 + KEY_WITHDRAW_AMOUNT_UNIT + " INTEGER NULL, "
-                + KEY_WITHDRAW_TXID + " TEXT NULL);";
+                + KEY_WITHDRAW_TXID + " TEXT NULL, exchange TEXT NULL, error TEXT NULL);";
 
         public Helper(final Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -241,8 +247,14 @@ public class ExchangeHistoryProvider extends ContentProvider {
 
         private void upgrade(final SQLiteDatabase db, final int oldVersion) {
             if (oldVersion == 1) {
-                db.execSQL(renameCoinId(KEY_DEPOSIT_COIN_ID, "darkcoin.main", "dash.main"));
-                db.execSQL(renameCoinId(KEY_WITHDRAW_COIN_ID, "darkcoin.main", "dash.main"));
+                db.execSQL(renameCoinId("exchange_history", "deposit_coin_id", "darkcoin.main", "dash.main"));
+                db.execSQL(renameCoinId("exchange_history", "withdraw_coin_id", "darkcoin.main", "dash.main"));
+            } else if (oldVersion == 2) {
+                resetTable(db, oldVersion);
+            } else if (oldVersion == 3) {
+                resetTable(db, oldVersion);
+            } else if (oldVersion == 4) {
+                resetTable(db, oldVersion);
             } else {
                 throw new UnsupportedOperationException("old=" + oldVersion);
             }
@@ -258,8 +270,8 @@ public class ExchangeHistoryProvider extends ContentProvider {
             cursor.close();
             db.execSQL("DROP TABLE " + oldTableName);
         }
-        private String renameCoinId(String fieldName, String from, String to) {
-            return "UPDATE " + DATABASE_TABLE + " SET " + fieldName +
+        private String renameCoinId(String tableName, String fieldName, String from, String to) {
+            return "UPDATE " + tableName + " SET " + fieldName +
                     " = replace(" + fieldName + ", \"" + from + "\", \"" + to + "\") " +
                     "WHERE " + fieldName + " == \"" + from + "\"";
         }
@@ -280,11 +292,11 @@ public class ExchangeHistoryProvider extends ContentProvider {
         public final AbstractAddress withdrawAddress;
         public final Value withdrawAmount;
         public final String withdrawTransactionId;
-
+        public final String exchange;
         public ExchangeEntry(int status, @Nonnull AbstractAddress depositAddress,
                              @Nonnull Value depositAmount, @Nonnull String depositTransactionId,
                              AbstractAddress withdrawAddress, Value withdrawAmount,
-                             String withdrawTransactionId, String error) {
+                             String withdrawTransactionId, String exchange, String error) {
             this.status = status;
             this.depositAddress = checkNotNull(depositAddress);
             this.depositAmount = checkNotNull(depositAmount);
@@ -293,10 +305,11 @@ public class ExchangeHistoryProvider extends ContentProvider {
             this.withdrawAmount = withdrawAmount;
             this.withdrawTransactionId = withdrawTransactionId;
             this.error = error;
+            this.exchange = exchange;
         }
 
-        public ExchangeEntry(AbstractAddress depositAddress, Value depositAmount, String depositTxId) {
-            this(STATUS_INITIAL, depositAddress, depositAmount, depositTxId, null, null, null, null);
+        public ExchangeEntry(AbstractAddress depositAddress, Value depositAmount, String depositTxId, String exchangeName) {
+            this(STATUS_INITIAL, depositAddress, depositAmount, depositTxId, null, null, null, exchangeName, null);
         }
 
         public ExchangeEntry(ExchangeEntry initialEntry, ShapeShiftTxStatus txStatus) {
@@ -310,6 +323,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
             this.withdrawAmount = txStatus.outgoingValue;
             this.withdrawTransactionId = txStatus.transactionId;
             this.error = txStatus.errorMessage;
+            this.exchange = initialEntry.exchange;
         }
 
         public ContentValues getContentValues() {
@@ -319,6 +333,7 @@ public class ExchangeHistoryProvider extends ContentProvider {
             values.put(KEY_DEPOSIT_COIN_ID, depositAddress.getType().getId());
             values.put(KEY_DEPOSIT_AMOUNT_UNIT, depositAmount.getBigInt().toByteArray());
             values.put(KEY_DEPOSIT_TXID, depositTransactionId);
+            values.put("exchange", this.exchange);
             if (withdrawAddress != null) values.put(KEY_WITHDRAW_ADDRESS, withdrawAddress.toString());
             if (withdrawAddress != null) values.put(KEY_WITHDRAW_COIN_ID, withdrawAddress.getType().getId());
             if (withdrawAmount != null) values.put(KEY_WITHDRAW_AMOUNT_UNIT, withdrawAmount.getBigInt().toByteArray());
@@ -348,8 +363,8 @@ public class ExchangeHistoryProvider extends ContentProvider {
                     shapeShiftStatus = ShapeShiftTxStatus.Status.UNKNOWN;
             }
 
-            return new ShapeShiftTxStatus(shapeShiftStatus, depositAddress, withdrawAddress,
-                    depositAmount, withdrawAmount, withdrawTransactionId);
+            return new ShapeShiftTxStatus(exchange, shapeShiftStatus, depositAddress, withdrawAddress,
+                    depositAmount, withdrawAmount, withdrawTransactionId, error);
         }
 
         public static int convertStatus(ShapeShiftTxStatus.Status shapeShiftStatus) {
@@ -367,5 +382,10 @@ public class ExchangeHistoryProvider extends ContentProvider {
                     return STATUS_UNKNOWN;
             }
         }
+        public ExchangeEntry resetStatus() {
+            return new ExchangeEntry(this.depositAddress, this.depositAmount, this.depositTransactionId, this.exchange);
+        }
     }
-}
+
+    }
+

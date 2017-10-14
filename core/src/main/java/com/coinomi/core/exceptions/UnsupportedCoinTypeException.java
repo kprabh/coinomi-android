@@ -13,4 +13,8 @@ public class UnsupportedCoinTypeException extends RuntimeException {
     public UnsupportedCoinTypeException(String message) {
         super(message);
     }
+
+    public UnsupportedCoinTypeException(Exception e) {
+        super(e);
+    }
 }

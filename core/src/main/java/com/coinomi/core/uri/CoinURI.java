@@ -30,10 +30,10 @@ import com.coinomi.core.wallet.families.bitcoin.BitAddress;
 import com.coinomi.core.wallet.families.eth.EthAddress;
 import com.coinomi.core.wallet.families.nxt.NxtAddress;
 import com.google.common.collect.Lists;
-
+import com.coinomi.core.wallet.families.eth.ERC20Token;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -209,31 +209,13 @@ public class CoinURI implements Serializable {
             // Attempt to parse the addressToken as a possible type address
             AbstractAddress address = null;
             for (CoinType possibleType : possibleTypes) {
-                if (possibleType instanceof NxtFamily) {
-                    try {
-                        address = new NxtAddress(possibleType, addressToken);
-                        putWithValidation(FIELD_ADDRESS, address);
-                        break;
-                    } catch (RuntimeException e) {  /* continue */ }
-                } else if (possibleType instanceof EthFamily) {
-                    try {
-                        address = new EthAddress(possibleType, addressToken);
-                        try {
-                            putWithValidation("address", address);
-                            break;
-                        } catch (RuntimeException e4) {
-                        }
-                    } catch (RuntimeException e5) {
-                    }
-                } else {
-                    try {
-                        address = BitAddress.from(possibleType, addressToken);
-                        putWithValidation(FIELD_ADDRESS, address);
-                        break;
-                    } catch (final AddressMalformedException e) { /* continue */ }
+                try {
+                    address = possibleType.newAddress(addressToken);
+                    putWithValidation("address", address);
+                    break;
+                } catch (AddressMalformedException e2) {
                 }
             }
-
             if (address == null) {
                 throw new CoinURIParseException("Bad address: " + addressToken);
             }
@@ -244,15 +226,20 @@ public class CoinURI implements Serializable {
                 checkState(type.equals(address.getType()));
             }
         }
-
-        // Attempt to parse the rest of the URI parameters.
+        int length = possibleTypes.size();
         parseParameters(nameValuePairTokens, possibleTypes);
-
-        // If until now we haven't found the coin type and the URI is an Address Request, use the default type
-        if (type == null && isAddressRequest()) {
-            type = possibleTypes.get(0);
+        if (length < possibleTypes.size()) {
+            this.type = (CoinType) possibleTypes.get(length);
+            try {
+                if (!addressToken.isEmpty()) {
+                    this.parameterMap.put("address", this.type.newAddress(addressToken));
         }
-
+            } catch (AddressMalformedException e3) {
+            }
+        }
+        if (this.type == null && isAddressRequest()) {
+            this.type = (CoinType) possibleTypes.get(0);
+        }
         if (!addressToken.isEmpty() && isAddressRequest()) {
             throw new CoinURIParseException("Cannot set an address when requesting an address");
         }
@@ -358,9 +345,21 @@ public class CoinURI implements Serializable {
                 }
                 if (type == null) type = parsedType;
                 putWithValidation(nameToken, valueToken);
-            } else {
-                if (nameToken.startsWith("req-")) {
-                    // A required parameter that we do not know about.
+            } else if ("req-asset".equalsIgnoreCase(nameToken)) {
+                CoinType parsedType = null;
+                    for (CoinType type : possibleTypes) {
+                        try {
+                            parsedType = CoinID.subTypeFromId(valueToken, type);
+                            break;
+                        } catch (UnsupportedCoinTypeException e5) {
+                        }
+                    }
+                    if (parsedType != null) {
+                        possibleTypes.add(parsedType);
+                    } else {
+                        throw new RequiredFieldValidationException("Unsupported asset '" + valueToken + "'");
+                    }
+                } else if (nameToken.startsWith("req-")) {
                     throw new RequiredFieldValidationException("'" + nameToken + "' is required but not known, this URI is not valid");
                 } else {
                     // Known fields and unknown parameters that are optional.
@@ -377,7 +376,7 @@ public class CoinURI implements Serializable {
 
         // Note to the future: when you want to implement 'req-expires' have a look at commit 410a53791841
         // which had it in.
-    }
+
 
     /**
      * Put the value against the key in the map checking for duplication. This avoids address field overwrite etc.
@@ -602,7 +601,14 @@ public class CoinURI implements Serializable {
             }
             builder.append(FIELD_PUBKEY).append("=").append(encodeURLString(pubkey));
         }
-        
+            if (type.isSubType() && (type instanceof ERC20Token)) {
+                if (questionMarkHasBeenOutput) {
+                    builder.append("&");
+                } else {
+                    builder.append("?");
+                }
+                builder.append("req-asset").append("=").append(encodeURLString(((ERC20Token) type).getAddress()));
+            }
         return builder.toString();
     }
 

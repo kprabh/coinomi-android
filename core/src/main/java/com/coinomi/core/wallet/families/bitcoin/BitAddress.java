@@ -1,6 +1,7 @@
 package com.coinomi.core.wallet.families.bitcoin;
 
 import com.coinomi.core.coins.CoinType;
+import com.coinomi.core.coins.families.BitFamily;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.wallet.AbstractAddress;
 
@@ -101,5 +102,25 @@ public class BitAddress extends Address implements AbstractAddress {
     @Override
     public long getId() {
         return ByteBuffer.wrap(getHash160()).getLong();
+    }
+
+    public boolean isP2SHAddress() {
+        boolean isP2SHAddress = super.isP2SHAddress();
+        if (isP2SHAddress || !(getType() instanceof BitFamily)) {
+            return isP2SHAddress;
+        }
+        for (int v : ((BitFamily) getType()).getP2SHHeaderExtras()) {
+            if (this.version == v) {
+                return true;
+            }
+        }
+        return isP2SHAddress;
+    }
+
+    public boolean equals(AbstractAddress o) {
+        if (o == null || !getType().equals(o.getType())) {
+            return false;
+        }
+        return super.equals(o);
     }
 }

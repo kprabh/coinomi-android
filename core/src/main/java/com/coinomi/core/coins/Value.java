@@ -183,6 +183,10 @@ public class Value implements MonetaryFormat.Monetary, Comparable<Value>, Serial
         return new Value(this.type, this.value.multiply(BigInteger.valueOf(factor)));
     }
 
+    public Value multiply(final BigInteger factor) {
+        return new Value(this.type, this.value.multiply(factor));
+    }
+
     public Value divide(final long divisor) {
         return new Value(this.type, this.value.divide(BigInteger.valueOf(divisor)));
     }

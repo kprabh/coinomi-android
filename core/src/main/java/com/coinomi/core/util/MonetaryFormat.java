@@ -411,7 +411,7 @@ public final class MonetaryFormat implements Serializable {
     }
     private BigDecimal getRoundedSatoshis(Monetary monetary, int smallestUnitExponent) {
         BigDecimal satoshis = new BigDecimal(monetary.getBigInt()).abs();
-        if (satoshis.equals(BigDecimal.ZERO)) {
+        if (smallestUnitExponent == 0 || satoshis.equals(BigDecimal.ZERO)) {
             return satoshis;
         }
         int maxDecimals = this.minDecimals;

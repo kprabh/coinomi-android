@@ -274,4 +274,12 @@ public class Configuration {
     public void setShapeshiftTermAccepted(boolean isTermsAccepted) {
         this.prefs.edit().putBoolean("shapeshift_terms_accepted", isTermsAccepted).apply();
     }
+
+    public boolean getChangellyTermsAccepted() {
+        return this.prefs.getBoolean("changelly_terms_accepted", false);
+    }
+
+    public void setChangellyTermAccepted(boolean isTermsAccepted) {
+        this.prefs.edit().putBoolean("changelly_terms_accepted", isTermsAccepted).apply();
+    }
 }

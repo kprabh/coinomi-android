@@ -117,10 +117,14 @@
             android:windowSoftInputMode="adjustResize" >
         </activity>
         <activity
+            android:theme="@style/AppTheme"
+            android:label="@string/title_activity_change_password"
+            android:name="com.coinomi.wallet.ui.ResetPasswordActivity" />
+       <!--<activity
             android:name="com.coinomi.wallet.ui.PasswordConfirmationActivity"
             android:theme="@style/AppThemeNoTitleBar"
             android:windowSoftInputMode="adjustResize" >
-        </activity>
+        </activity>-->
         <activity
             android:name="com.coinomi.wallet.ui.SignTransactionActivity"
             android:theme="@style/AppThemeNoTitleBar"
@@ -153,6 +157,26 @@
             android:name="com.coinomi.wallet.ui.TransactionDetailsActivity"
             android:label="@string/title_activity_transaction_details"
             android:theme="@style/AppTheme" >
+        </activity>
+        <activity
+            android:theme="@style/AppTheme"
+            android:label="@string/title_activity_contract_details"
+            android:name="com.coinomi.wallet.ui.ContractDetailsActivity" />
+        <activity
+            android:theme="@style/AppTheme"
+            android:label="@string/contract_add"
+            android:name="com.coinomi.wallet.ui.AddContractActivity" />
+        <activity
+            android:theme="@style/AppTheme"
+            android:label="@string/title_activity_contract_details"
+            android:name="com.coinomi.wallet.ui.ContractFunctionActivity" />
+        <activity
+            android:theme="@style/AppTheme"
+            android:label="@string/title_activity_contract_details"
+            android:name="com.coinomi.wallet.ui.ContractsActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="com.coinomi.wallet.ui.WalletActivity" />
         </activity>
         <activity
             android:name="com.coinomi.wallet.ui.ExchangeRatesActivity"

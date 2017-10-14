@@ -22,8 +22,7 @@ import com.coinomi.core.coins.FeePolicy;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.wallet.families.bitcoin.CoinSelector;
-import com.google.common.base.Objects;
-import com.google.common.base.Objects.ToStringHelper;
+import com.google.common.base.MoreObjects;
 
 import org.bitcoinj.core.Transaction;
 import org.bitcoinj.wallet.Wallet.MissingSigsMode;
@@ -251,17 +250,6 @@ public abstract class SendRequest<T extends AbstractTransaction, A extends Abstr
 
     @Override
     public String toString() {
-        // print only the user-settable fields
-        ToStringHelper helper = Objects.toStringHelper(this).omitNullValues();
-        helper.add("emptyWallet", emptyWallet);
-        helper.add("changeAddress", changeAddress);
-        helper.add("fee", fee);
-        helper.add("feePerTxSize", feePerTxSize);
-        helper.add("ensureMinRequiredFee", ensureMinRequiredFee);
-        helper.add("signTransaction", signTransaction);
-        helper.add("aesKey", aesKey != null ? "set" : null); // careful to not leak the key
-        helper.add("coinSelector", coinSelector);
-        helper.add("shuffleOutputs", shuffleOutputs);
-        return helper.toString();
+        return MoreObjects.toStringHelper(this).omitNullValues().add("emptyWallet", this.emptyWallet).add("changeAddress", this.changeAddress).add("fee", this.fee).add("feePerTxSize", this.feePerTxSize).add("ensureMinRequiredFee", this.ensureMinRequiredFee).add("signTransaction", this.signTransaction).add("aesKey", this.aesKey != null ? "set" : null).add("coinSelector", this.coinSelector).add("shuffleOutputs", this.shuffleOutputs).toString();
     }
 }

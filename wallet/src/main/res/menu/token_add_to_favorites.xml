@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+    <item
+        android:icon="@drawable/plus_menu"
+        android:id="@+id/action_add_to_favorites"
+        android:title="@string/token_add_to_favorites"
+        app:showAsAction="ifRoom" />
+</menu>
