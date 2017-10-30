@@ -4,16 +4,22 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.ListView;
 import android.widget.Toast;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnItemClick;
 import butterknife.Unbinder;
+
+import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.wallet.WalletAccount;
 import com.coinomi.core.wallet.families.eth.EthContract;
 import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
@@ -24,13 +30,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class ContractsFragment extends Fragment {
+    private static final String[] CONTRACT_TYPES = new String[]{"ERC20"};
     private static final Logger log = LoggerFactory.getLogger(ContractsFragment.class);
     private EthFamilyWallet account;
     ContractsListAdapter adapter;
     private WalletApplication application;
     @BindView(2131689704)
     ListView contractRows;
+    AutoCompleteTextView filter;
+    Listener listener;
     private Unbinder unbinder;
+
+    class C04051 implements TextWatcher {
+        C04051() {
+        }
+
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+            System.out.println("Text [" + s + "]");
+            ContractsFragment.this.adapter.getFilter().filter(s.toString());
+        }
+
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+        }
+
+        public void afterTextChanged(Editable s) {
+        }
+    }
+
+    public interface Listener {
+        void showSubtype(String str, CoinType coinType);
+    }
 
     public static ContractsFragment newInstance(String accountId) {
         ContractsFragment fragment = new ContractsFragment();
@@ -58,7 +87,11 @@ public class ContractsFragment extends Fragment {
 
     private void addHeaderAndFooterToList(LayoutInflater inflater, ViewGroup container, View view) {
         ListView list = (ListView) ButterKnife.findById(view, (int) R.id.contract_rows);
-        list.addHeaderView(inflater.inflate(R.layout.fragment_contracts_header, null), null, true);
+        View header = inflater.inflate(R.layout.fragment_contracts_header, null);
+        list.addHeaderView(header, null, true);
+        ArrayAdapter<String> typesAdapter = new ArrayAdapter(getContext(), 17367050, CONTRACT_TYPES);
+        this.filter = (AutoCompleteTextView) header.findViewById(R.id.contracts_query);
+        this.filter.setAdapter(typesAdapter);
         View listFooter = new View(inflater.getContext());
         listFooter.setMinimumHeight(getResources().getDimensionPixelSize(R.dimen.activity_vertical_margin));
         list.addFooterView(listFooter);
@@ -82,6 +115,7 @@ public class ContractsFragment extends Fragment {
         this.unbinder = ButterKnife.bind((Object) this, view);
         if (this.account != null) {
             setupAdapter(inflater);
+            this.filter.addTextChangedListener(new C04051());
         }
         return view;
     }
@@ -99,20 +133,31 @@ public class ContractsFragment extends Fragment {
 
     public void onResume() {
         super.onResume();
-        this.adapter.notifyDataSetChanged();
+        this.adapter.replace(this.account.getContracts());
     }
 
     public void onAttach(Context context) {
         super.onAttach(context);
+        try {
+            this.listener = (Listener) context;
         this.application = (WalletApplication) context.getApplicationContext();
+        } catch (ClassCastException e) {
+            throw new ClassCastException("Activity must implement ContractsFragment Listener.");
+        }
     }
 
     @OnItemClick({2131689704})
     public void onItemClick(int position) {
         if (position >= this.contractRows.getHeaderViewsCount()) {
-            Object obj = this.contractRows.getItemAtPosition(position);
+            EthContract obj = (EthContract)this.contractRows.getItemAtPosition(position);
             if (obj == null || !(obj instanceof EthContract)) {
                 Toast.makeText(getActivity(), getString(R.string.get_contract_info_error), Toast.LENGTH_LONG).show();
+                return;
+            }
+            EthContract contract = obj;
+            String contractId = obj.getContractAddress();
+            if (contract.isContractType("erc20") || contract.getContractSuitName().equalsIgnoreCase("token-interface")) {
+                this.listener.showSubtype(this.account.getId(), contract.getSubType());
                 return;
             }
             Intent intent = new Intent(getActivity(), ContractDetailsActivity.class);

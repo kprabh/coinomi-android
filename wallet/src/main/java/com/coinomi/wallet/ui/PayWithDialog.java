@@ -95,7 +95,7 @@ public class PayWithDialog extends DialogFragment {
         }
 
         if (canExchange) {
-            TextView poweredByShapeShift = (TextView) view.findViewById(R.id.powered_by_shapeshift);
+            TextView poweredByShapeShift = (TextView) view.findViewById(R.id.powered_by);
             poweredByShapeShift.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
@@ -109,7 +109,7 @@ public class PayWithDialog extends DialogFragment {
         } else {
             UiUtils.setGone(view.findViewById(R.id.exchange_and_pay_title));
             UiUtils.setGone(exchangeAccounts);
-            UiUtils.setGone(view.findViewById(R.id.powered_by_shapeshift));
+            UiUtils.setGone(view.findViewById(R.id.powered_by));
         }
 
         return new DialogBuilder(getActivity())

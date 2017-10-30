@@ -12,20 +12,26 @@ import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.AsyncTaskLoader;
 import android.support.v4.content.Loader;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.exceptions.ExecutionException;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.util.MonetaryFormat;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.core.wallet.WalletAccount;
 import com.coinomi.core.wallet.WalletConnectivityStatus;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.Constants;
@@ -36,6 +42,7 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.widget.Amount;
 import com.coinomi.wallet.ui.widget.SponsorView;
 import com.coinomi.wallet.ui.widget.SwipeRefreshLayout;
+import com.coinomi.wallet.util.ThrottlingAccountContractChangeListener;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.WeakHandler;
 import com.google.common.collect.Lists;
@@ -77,7 +84,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     private static final int ID_RATE_LOADER = 1;
 
     private String accountId;
-    private WalletAccount pocket;
+    private WalletAccount account;
     private CoinType type;
     private Value currentBalance;
     private ExchangeRate exchangeRate;
@@ -86,6 +93,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     private WalletApplication application;
     private Configuration config;
     private final MyHandler handler = new MyHandler(this);
+    private final MyAccountContractListener contractListener = new MyAccountContractListener(this.handler);
     private final ContentObserver addressBookObserver = new AddressBookObserver(handler);
     @BindView(2131689680)
     TextView blockHeight;
@@ -109,14 +117,27 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
      * @param accountId of the account
      * @return A new instance of fragment InfoFragment.
      */
-    public static BalanceFragment newInstance(String accountId) {
+    public static BalanceFragment newInstance(String accountId, CoinType subType) {
         BalanceFragment fragment = new BalanceFragment();
         Bundle args = new Bundle();
         args.putSerializable(Constants.ARG_ACCOUNT_ID, accountId);
+        if (subType != null) {
+            args.putString("sub_coin_id", subType.getId());
+        }
         fragment.setArguments(args);
         return fragment;
     }
+    static class MyAccountContractListener extends ThrottlingAccountContractChangeListener {
+        private final MyHandler handler;
 
+        public MyAccountContractListener(MyHandler handler) {
+            this.handler = handler;
+        }
+
+        public void onThrottledContractChanged() {
+            this.handler.sendEmptyMessage(3);
+        }
+    }
     public BalanceFragment() {
         // Required empty public constructor
     }
@@ -132,13 +153,25 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
             accountId = getArguments().getString(Constants.ARG_ACCOUNT_ID);
         }
         //TODO
-        pocket = application.getAccount(accountId);
-        if (pocket == null) {
+        account = application.getAccount(accountId);
+        if (account == null) {
             Toast.makeText(getActivity(), R.string.no_such_pocket_error, Toast.LENGTH_LONG).show();
             return;
         }
-        this.type = this.pocket.getCoinType();
+        if (getArguments().containsKey("sub_coin_id")) {
+            try {
+                this.type = CoinID.typeFromId(getArguments().getString("sub_coin_id"));
+            } catch (UnsupportedCoinTypeException e) {
+                Toast.makeText(getActivity(), R.string.no_such_pocket_error, Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
+        this.type = this.account.getCoinType();
         this.fullMonetaryFormat = this.type.getMoneyFormat();
+        if (this.type.getUnitExponent() < 4) {
+            this.shortMonetaryFormat = this.type.getMoneyFormat().minDecimals(2);
+            return;
+        }
         this.shortMonetaryFormat = this.type.getMoneyFormat().minDecimals(2).optionalDecimals(2);
     }
 
@@ -154,7 +187,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         setupSponsor();
         // TODO show empty message
         // Hide empty message if have some transaction history
-        if (pocket.getTransactions().size() > 0) {
+        if (account.getTransactions().size() > 0) {
             emptyPocketMessage.setVisibility(View.GONE);
         }
 
@@ -163,7 +196,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         exchangeRate = ExchangeRatesProvider.getRate(
                 application.getApplicationContext(), type.getSymbol(), config.getExchangeCurrencyCode());
         // Update the amount
-        updateBalance(pocket.getBalance());
+        updateBalance(account.getBalance(type));
 
         return view;
     }
@@ -179,7 +212,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
 
     private void setupAdapter(LayoutInflater inflater) {
         // Init list adapter
-        adapter = new TransactionsListAdapter(inflater.getContext(), (AbstractWallet) pocket);
+        adapter = new TransactionsListAdapter(inflater.getContext(), (AbstractWallet) account);
         adapter.setPrecision(AMOUNT_MEDIUM_PRECISION, 0);
         transactionRows.setAdapter(adapter);
     }
@@ -191,6 +224,13 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
             public void onRefresh() {
                 if (listener != null) {
                     listener.onRefresh();
+                }
+                if ((BalanceFragment.this.type instanceof ERC20Token) && (BalanceFragment.this.account instanceof EthFamilyWallet)) {
+                    try {
+                        ((ERC20Token) BalanceFragment.this.type).getFreshBalance((EthFamilyWallet) BalanceFragment.this.account);
+                    } catch (ExecutionException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         });
@@ -267,7 +307,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     @Deprecated
     private void checkEmptyPocketMessage() {
         if (emptyPocketMessage.isShown()) {
-            if (!pocket.isNew()) {
+            if (!account.isNew()) {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
@@ -279,7 +319,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     }
 
     private void updateBalance() {
-        updateBalance(pocket.getBalance());
+        updateBalance(account.getBalance());
     }
 
     private void updateBalance(final Value newBalance) {
@@ -289,7 +329,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
     }
 
     private void updateConnectivityStatus() {
-        setConnectivityStatus(pocket.getConnectivityStatus());
+        setConnectivityStatus(account.getConnectivityStatus());
     }
 
     private void setConnectivityStatus(final WalletConnectivityStatus connectivity) {
@@ -351,7 +391,10 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         resolver.registerContentObserver(AddressBookProvider.contentUri(
                 getActivity().getPackageName(), type), true, addressBookObserver);
 
-        pocket.addEventListener(walletChangeListener, Threading.SAME_THREAD);
+        account.addEventListener(walletChangeListener, Threading.SAME_THREAD);
+        if ((this.account instanceof EthFamilyWallet) && (this.type instanceof ERC20Token)) {
+            ((EthFamilyWallet) this.account).addContractEventListener(((ERC20Token) this.type).getAddress(), this.contractListener);
+        }
 
         checkEmptyPocketMessage();
 
@@ -360,9 +403,11 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
 
     @Override
     public void onPause() {
-        pocket.removeEventListener(walletChangeListener);
+        account.removeEventListener(walletChangeListener);
         walletChangeListener.removeCallbacks();
-
+        if ((this.account instanceof EthFamilyWallet) && (this.type instanceof ERC20Token)) {
+            ((EthFamilyWallet) this.account).removeContractEventListener(((ERC20Token) this.type).getAddress(), this.contractListener);
+        }
         resolver.unregisterContentObserver(addressBookObserver);
 
         super.onPause();
@@ -370,7 +415,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
 
     @Override
     public Loader<List<AbstractTransaction>> onCreateLoader(int id, Bundle args) {
-        return new AbstractTransactionsLoader(getActivity(), pocket);
+        return new AbstractTransactionsLoader(getActivity(), account, type);
     }
 
     @Override
@@ -388,7 +433,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
 
     @Override
     public WalletAccount getAccount() {
-        return pocket;
+        return account;
     }
 
     private static class AbstractTransactionsLoader extends AsyncTaskLoader<List<AbstractTransaction>> {
@@ -396,10 +441,11 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         private final ThrottlingWalletChangeListener transactionAddRemoveListener;
 
 
-        private AbstractTransactionsLoader(final Context context, @Nonnull final WalletAccount account) {
+        private AbstractTransactionsLoader(final Context context, @Nonnull final WalletAccount account, CoinType subType) {
             super(context);
 
             this.account = account;
+            subType = subType;
             this.transactionAddRemoveListener = new ThrottlingWalletChangeListener() {
                 @Override
                 public void onThrottledWalletChanged() {
@@ -433,9 +479,11 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
         @Override
         public List<AbstractTransaction> loadInBackground() {
             final List<AbstractTransaction> filteredAbstractTransactions = Lists.newArrayList(account.getTransactions().values());
-
+            try {
             Collections.sort(filteredAbstractTransactions, TRANSACTION_COMPARATOR);
-
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             return filteredAbstractTransactions;
         }
 
@@ -517,7 +565,7 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
             }
         }
 
-        swipeContainer.setRefreshing(pocket.isLoading());
+        swipeContainer.setRefreshing(account.isLoading());
         this.blockHeight.setText(getResources().getString(R.string.block_height, new Object[]{String.valueOf(getAccount().getLastBlockSeenHeight())}));
         if (adapter != null) adapter.clearLabelCache();
     }
@@ -544,6 +592,27 @@ public class BalanceFragment extends WalletFragment implements LoaderCallbacks<L
                     ref.clearLabelCache();
                     break;
             }
+        }
+    }
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.action_add_to_favorites:
+                if ((this.account instanceof EthFamilyWallet) && (this.type instanceof ERC20Token)) {
+          //          ((EthFamilyWallet) this.account).addToFavorites((ERC20Token) this.type);
+                    Toast.makeText(getContext(), getString(R.string.token_added_to_favorites, this.type.getName()),  Toast.LENGTH_LONG).show();
+                    if (getActivity() instanceof WalletActivity) {
+                        ((WalletActivity) getActivity()).onAccountModified(this.account);
+                    }
+                }
+                return true;
+            case R.id.action_remove_from_favorites:
+                if ((this.account instanceof EthFamilyWallet) && (this.type instanceof ERC20Token)) {
+         //           ((EthFamilyWallet) this.account).removeFromFavorites((ERC20Token) this.type);
+                    Toast.makeText(getContext(), getString(R.string.token_removed_from_favorites, this.type.getName()), Toast.LENGTH_LONG).show();
+                }
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
         }
     }
 

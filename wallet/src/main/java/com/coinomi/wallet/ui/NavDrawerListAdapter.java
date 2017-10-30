@@ -75,6 +75,7 @@ public class NavDrawerListAdapter extends BaseAdapter {
                     break;
                 case ITEM_COIN:
                 case ITEM_OVERVIEW:
+                case ITEM_SUBTYPE:
                 case ITEM_TRADE:
                     row = new NavDrawerItemView(context);
                     break;
@@ -95,6 +96,10 @@ public class NavDrawerListAdapter extends BaseAdapter {
             case ITEM_OVERVIEW:
             case ITEM_TRADE:
                 ((NavDrawerItemView) row).setData(item.title, item.iconRes);
+                break;
+            case ITEM_SUBTYPE:
+                ((NavDrawerItemView) row).setData(item.title, item.icon);
+                ((NavDrawerItemView) row).setIdent();
                 break;
         }
 

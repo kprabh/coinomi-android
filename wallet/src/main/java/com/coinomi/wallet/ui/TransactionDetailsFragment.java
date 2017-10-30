@@ -212,44 +212,52 @@ public class TransactionDetailsFragment extends Fragment {
                 }
             } catch (Exception e) {
                 if (ACRA.isInitialised()) {
-                ACRA.getErrorReporter().handleSilentException(e);
+                    ACRA.getErrorReporter().handleSilentException(e);
+                }
             }
         }
-    }
-        if (tx instanceof EthTransaction) {
-            JSONObject logsObj = ((EthTransaction) tx).getLogs((EthFamilyWallet) pocket); try {
-            if (logsObj.has("parsed") && logsObj.getBoolean("parsed")) {
-                this.txMessageLabel.setText(getString(R.string.eth_tx_logs));
-                this.txMessageLabel.setVisibility(View.VISIBLE);
-                this.txMessage.setText(logsObj.toString());
-                this.txMessage.setVisibility(View.VISIBLE);
-                return;
-            }
 
-                JSONArray logs = logsObj.getJSONArray("logs");
-                if (logs.length() > 0) {
-                    StringBuilder logsPretify = new StringBuilder();
-                    for (int j = 0; j < logs.length(); j++) {
-                        try {
-                            JSONObject log = logs.getJSONObject(j);
-                            JSONArray topics = log.getJSONArray("topics");
-                            logsPretify.append(getString(R.string.eth_logs_topic) + ":\t");
-                            for (int i = 0; i < topics.length(); i++) {
-                                logsPretify.append("[" + i + "] " + topics.getString(i) + " \n");
-                            }
-                            logsPretify.append(getString(R.string.eth_logs_data) + ":\t");
-                            logsPretify.append(log.getString("data"));
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
+        if (tx instanceof EthTransaction) {
+            JSONArray logsArray = ((EthTransaction) tx).getLogs((EthFamilyWallet) pocket);
+            this.txMessage.setText("");
+            int i = 0;
+            while (i < logsArray.length()) {
+            try
+             {
+                JSONObject logsObj = logsArray.getJSONObject(i);
+                if (logsObj.has("parsed") && logsObj.getBoolean("parsed")) {
                     this.txMessageLabel.setText(getString(R.string.eth_tx_logs));
                     this.txMessageLabel.setVisibility(View.VISIBLE);
-                    this.txMessage.setText(logsPretify);
+                    this.txMessage.setText(this.txMessage.getText() + "\n" + logsObj.toString());
                     this.txMessage.setVisibility(View.VISIBLE);
+                    i++;
+                } else {
+                    JSONArray logs = logsObj.getJSONArray("logs");
+                    if (logs.length() > 0) {
+                        StringBuilder logsPretify = new StringBuilder();
+                        for (int j = 0; j < logs.length(); j++) {
+                            try {
+                                JSONObject log = logs.getJSONObject(j);
+                                JSONArray topics = log.getJSONArray("topics");
+                                logsPretify.append(getString(R.string.eth_logs_topic) + ":\t");
+                                for (int k = 0; k < topics.length(); k++) {
+                                    logsPretify.append("[" + k + "] " + topics.getString(k) + " \n");
+                                }
+                                logsPretify.append(getString(R.string.eth_logs_data) + ":\t");
+                                logsPretify.append(log.getString("data"));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        this.txMessageLabel.setText(getString(R.string.eth_tx_logs));
+                        this.txMessageLabel.setVisibility(View.VISIBLE);
+                        this.txMessage.setText(logsPretify);
+                        this.txMessage.setVisibility(View.VISIBLE);
+                    }
                 }
-            } catch (JSONException e) {
-                e.printStackTrace();
+                } catch(JSONException e){
+                    e.printStackTrace();
+                }
             }
         }
     }

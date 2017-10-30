@@ -17,8 +17,10 @@ import android.support.v7.app.ActionBar;
 import android.support.v7.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.Toast;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.uri.CoinURI;
@@ -27,6 +29,8 @@ import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.SerializedKey;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.service.CoinService;
@@ -58,7 +62,7 @@ import static com.coinomi.wallet.ui.NavDrawerItemType.ITEM_TRADE;
 final public class WalletActivity extends BaseWalletActivity implements
         NavigationDrawerFragment.Listener,
         AccountFragment.Listener, OverviewFragment.Listener, SelectCoinTypeDialog.Listener,
-        PayWithDialog.Listener, TermsOfUseDialog.Listener {
+        PayWithDialog.Listener, TermsOfUseDialog.Listener, ContractsFragment.Listener {
     private static final Logger log = LoggerFactory.getLogger(WalletActivity.class);
 
 
@@ -204,6 +208,19 @@ final public class WalletActivity extends BaseWalletActivity implements
         }
     }
 
+    private void navDrawerSelectToken(WalletAccount account, CoinType subType, boolean closeDrawer) {
+        if (this.mNavigationDrawerFragment != null && account != null) {
+            int position = 0;
+            for (NavDrawerItem item : this.navDrawerItems) {
+                if (item.itemType == NavDrawerItemType.ITEM_SUBTYPE && item.subType.equals(subType) && account.getId().equals(item.itemData)) {
+                    this.mNavigationDrawerFragment.setSelectedItem(position, closeDrawer);
+                    return;
+                }
+                position++;
+            }
+        }
+    }
+
     private void navDrawerSelectOverview(boolean closeDrawer) {
         if (mNavigationDrawerFragment != null) {
             int position = 0;
@@ -219,13 +236,20 @@ final public class WalletActivity extends BaseWalletActivity implements
 
     private void createNavDrawerItems() {
         navDrawerItems.clear();
-        NavDrawerItem.addItem(navDrawerItems, ITEM_SECTION_TITLE, getString(R.string.navigation_drawer_services));
-        NavDrawerItem.addItem(navDrawerItems, ITEM_TRADE, getString(R.string.title_activity_trade), R.drawable.trade, null);
+        NavDrawerItem.addItem(this.navDrawerItems, NavDrawerItemType.ITEM_SECTION_TITLE, getString(R.string.trade));
+       /*NavDrawerItem.addItem(navDrawerItems, ITEM_SECTION_TITLE, getString(R.string.navigation_drawer_services));*/
+        NavDrawerItem.addItem(navDrawerItems, ITEM_SECTION_TITLE, getString(R.string.trade));
+        NavDrawerItem.addItem(this.navDrawerItems, NavDrawerItemType.ITEM_TRADE, getString(R.string.changelly), Integer.valueOf(R.drawable.changelly), "changelly");
+        NavDrawerItem.addItem(this.navDrawerItems, NavDrawerItemType.ITEM_TRADE, getString(R.string.shapeshift), Integer.valueOf(R.drawable.shapeshift), "shapeshift");
+   /*     NavDrawerItem.addItem(navDrawerItems, ITEM_TRADE, getString(R.string.title_activity_trade), R.drawable.trade, null);*/
         NavDrawerItem.addItem(navDrawerItems, ITEM_SECTION_TITLE, getString(R.string.navigation_drawer_wallet));
         NavDrawerItem.addItem(navDrawerItems, ITEM_OVERVIEW, getString(R.string.title_activity_overview), R.drawable.ic_launcher, null);
         for (WalletAccount account : getAllAccounts()) {
             NavDrawerItem.addItem(navDrawerItems, ITEM_COIN, account.getDescriptionOrCoinName(),
                     Constants.COINS_ICONS.get(account.getCoinType()), account.getId());
+            for (CoinType ctype : (List<CoinType>)account.favoriteSubTypes()) {
+                NavDrawerItem.addItem(this.navDrawerItems, NavDrawerItemType.ITEM_SUBTYPE, ctype.getName(), ctype.getIcon(), account.getId(), ctype);
+            }
         }
     }
 
@@ -269,10 +293,13 @@ final public class WalletActivity extends BaseWalletActivity implements
     }
 
     @Override
-    public void onAccountSelected(String accountId) {
+    public void onAccountSelected(String accountId, CoinType subType) {
         log.info("Coin selected {}", accountId);
-
+        if (subType == null) {
         openAccount(accountId);
+        } else {
+            showSubtype(accountId, subType);
+        }
     }
 
     @Override
@@ -280,9 +307,11 @@ final public class WalletActivity extends BaseWalletActivity implements
         startActivityForResult(new Intent(WalletActivity.this, AddCoinsActivity.class), ADD_COIN);
     }
 
-    @Override
-    public void onTradeSelected() {
-        startActivity(new Intent(WalletActivity.this, TradeActivity.class));
+
+    public void onTradeSelected(String exchange) {
+        Intent exchangeIntent = new Intent(this, TradeActivity.class);
+        exchangeIntent.putExtra("exchange_id", exchange);
+        startActivity(exchangeIntent);
         // Reselect the last item as the trade is a separate activity
         if (isOverviewVisible) {
             navDrawerSelectOverview(true);
@@ -330,13 +359,13 @@ final public class WalletActivity extends BaseWalletActivity implements
 
     private void openAccount(WalletAccount account, boolean selectInNavDrawer) {
         if (account != null && !isChangingConfigurations() && !isFinishing()) {
-            if (isAccountVisible(account)) return;
+            if (isAccountVisible(account) && !this.accountFragment.hasSubType()) return;
 
             FragmentTransaction ft = getFM().beginTransaction();
             ft.hide(overviewFragment);
 
             // If this account fragment is hidden, show it
-            if (accountFragment != null && account.getId().equals(lastAccountId)) {
+            if (accountFragment != null && account.getId().equals(lastAccountId) && !accountFragment.hasSubType()) {
                 ft.show(accountFragment);
             } else {
                 // Else create a new fragment for the new account
@@ -358,6 +387,33 @@ final public class WalletActivity extends BaseWalletActivity implements
             // Hide the shadow of the action bar because the PagerTabStrip of the AccountFragment is visible
             if (getSupportActionBar() != null) {
                 getSupportActionBar().setElevation(0);
+            }
+        }
+    }
+
+    public void showSubtype(String accountId, CoinType subType) {
+        Preconditions.checkState(subType instanceof ERC20Token, "Only ERC20 is currently supported");
+        WalletAccount account = getAccount(accountId);
+        if (account != null && !isChangingConfigurations() && !isFinishing()) {
+            FragmentTransaction ft = getFM().beginTransaction();
+            ft.hide(this.overviewFragment);
+            this.lastAccountId = account.getId();
+            if (this.accountFragment != null) {
+                ft.remove(this.accountFragment);
+            }
+            this.accountFragment = AccountFragment.getInstance(this.lastAccountId);
+            Bundle args = this.accountFragment.getArguments();
+            args.putString("sub_coin_id", subType.getId());
+            this.accountFragment.setArguments(args);
+            ft.add(R.id.contents, this.accountFragment, "account_tag");
+            getWalletApplication().getConfiguration().touchLastAccountId(this.lastAccountId);
+            ft.commitAllowingStateLoss();
+            this.title = ((EthFamilyWallet) account).getContract((ERC20Token) subType).getName() + " (" + account.getDescriptionOrCoinName() + ")";
+            this.isOverviewVisible = false;
+            connectCoinService(this.lastAccountId);
+            navDrawerSelectToken(account, subType, true);
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setElevation(0.0f);
             }
         }
     }
@@ -493,7 +549,7 @@ final public class WalletActivity extends BaseWalletActivity implements
         CoinURI coinUri = new CoinURI(input);
         CoinType scannedType = coinUri.getTypeRequired();
 
-        if (!Constants.SUPPORTED_COINS.contains(scannedType)) {
+        if (!Constants.SUPPORTED_COINS.contains(scannedType) && !(scannedType instanceof ERC20Token)) {
             String error = getResources().getString(R.string.unsupported_coin, scannedType.getName());
             throw new CoinURIParseException(error);
         }
@@ -548,14 +604,14 @@ final public class WalletActivity extends BaseWalletActivity implements
                 processUri(CoinURI.convertToCoinURI(addressOfAccount, null, null, null));
             } else {
                 // As a last resort let the use choose the correct coin type
-                showPayToDialog(addressStr);
+                showPayToDialog(addressStr, null);
             }
         }
     }
 
-    public void showPayToDialog(String addressStr) {
+    public void showPayToDialog(String addressStr, String subType) {
         Dialogs.dismissAllowingStateLoss(getFM(), PAY_TO_DIALOG_TAG);
-        SelectCoinTypeDialog.getInstance(addressStr).show(getFM(), PAY_TO_DIALOG_TAG);
+        SelectCoinTypeDialog.getInstance(addressStr, subType).show(getFM(), PAY_TO_DIALOG_TAG);
     }
 
     @Override
@@ -574,7 +630,9 @@ final public class WalletActivity extends BaseWalletActivity implements
 
     @Override
     public void payWith(final WalletAccount account, final CoinURI coinUri) {
-        openAccount(account);
+        if (!coinUri.getType().isSubType()) {
+            openAccount(account);
+        }
         // Set url asynchronously as the account may need to open
         handler.sendMessage(handler.obtainMessage(SET_URI, coinUri));
     }
@@ -617,20 +675,24 @@ final public class WalletActivity extends BaseWalletActivity implements
             sweepWallet(null);
             return true;
         } else if (id == R.id.action_support) {
-            goToSupportWebsite();
+            goToWebsite("https://coinomi.freshdesk.com");
+            return true;
+        } else if (id == R.id.action_export_keys) {
+            goToWebsite("https://coinomi.com/recovery-phrase-tool.html");
             return true;
         } else if (id == R.id.action_about) {
-            startActivity(new Intent(WalletActivity.this, AboutActivity.class));
+            return super.onOptionsItemSelected(item);
+        } else {
+            startActivity(new Intent(this, AboutActivity.class));
             return true;
         }
-
-        return super.onOptionsItemSelected(item);
+        //return super.onOptionsItemSelected(item);
     }
-    private void goToSupportWebsite() {
+    private void goToWebsite(String url) {
         try {
-            startActivity(new Intent("android.intent.action.VIEW", Uri.parse("https://coinomi.freshdesk.com")));
+            startActivity(new Intent("android.intent.action.VIEW", Uri.parse(url)));
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, R.string.error_generic, 0).show();
+            Toast.makeText(this, R.string.error_generic, View.VISIBLE).show();
         }
     }
 

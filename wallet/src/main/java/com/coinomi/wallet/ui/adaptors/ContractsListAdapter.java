@@ -5,30 +5,78 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
+import android.widget.Filter;
+//import android.widget.Filter.FilterResults;
+import android.widget.Filterable;
 import android.widget.TextView;
 import com.coinomi.core.wallet.families.eth.EthContract;
 import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.R;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import org.json.JSONException;
 
-public class ContractsListAdapter extends BaseAdapter {
+public class ContractsListAdapter extends BaseAdapter implements Filterable {
     private final Context context;
     private final List<EthContract> contracts = new ArrayList();
+    private List<EthContract> filteredContracts = new ArrayList();
     private final LayoutInflater inflater;
+    private ItemFilter mFilter = new ItemFilter();
+
+    private class ItemFilter extends Filter {
+        private ItemFilter() {
+        }
+
+        protected FilterResults performFiltering(CharSequence constraint) {
+            String filterString = constraint.toString().toLowerCase();
+            FilterResults results = new FilterResults();
+            List<EthContract> list = ContractsListAdapter.this.contracts;
+            int count = list.size();
+            ArrayList<EthContract> nlist = new ArrayList(count);
+            if (filterString.isEmpty()) {
+                nlist.addAll(ContractsListAdapter.this.contracts);
+            } else {
+                int i = 0;
+                while (i < count) {
+                    EthContract filterableString = (EthContract) list.get(i);
+                    try {
+                        if (filterableString.isContractType(filterString) || filterableString.toJSON().toString().toLowerCase().contains(filterString.toLowerCase())) {
+                            nlist.add(filterableString);
+                            i++;
+                        } else {
+                            i++;
+                        }
+                    } catch (JSONException e) {
+                        nlist.addAll(ContractsListAdapter.this.contracts);
+                    }
+                }
+            }
+            results.values = nlist;
+            results.count = nlist.size();
+            return results;
+        }
+
+        protected void publishResults(CharSequence constraint, FilterResults results) {
+            ContractsListAdapter.this.filteredContracts = (ArrayList) results.values;
+            ContractsListAdapter.this.sortByName(true);
+            ContractsListAdapter.this.notifyDataSetChanged();
+        }
+    }
 
     public ContractsListAdapter(Context context, EthFamilyWallet account) {
         this.context = context;
         this.inflater = LayoutInflater.from(context);
         this.contracts.addAll(account.getContracts());
+        this.filteredContracts.addAll(account.getContracts());
     }
 
     public void sortByName(final boolean ascending) {
-        Collections.sort(this.contracts, new Comparator<EthContract>() {
+        Collections.sort(this.filteredContracts, new Comparator<EthContract>() {
             public int compare(EthContract contract, EthContract t1) {
-                return ascending ? contract.getName().compareTo(t1.getName()) : contract.getName().compareTo(t1.getName()) * -1;
+                return ascending ? contract.getName().toLowerCase().compareTo(t1.getName().toLowerCase()) : contract.getName().toLowerCase().compareTo(t1.getName().toLowerCase()) * -1;
             }
         });
     }
@@ -82,5 +130,15 @@ public class ContractsListAdapter extends BaseAdapter {
             descriptionText = descriptionText + this.context.getString(R.string.ellipsis);
         }
         ((TextView) row.findViewById(R.id.contract_row_description)).setText(descriptionText);
+    }
+
+    public Filter getFilter() {
+        return this.mFilter;
+    }
+
+    public void replace(Collection<? extends EthContract> contracts) {
+        this.contracts.clear();
+        this.contracts.addAll(contracts);
+        notifyDataSetChanged();
     }
 }

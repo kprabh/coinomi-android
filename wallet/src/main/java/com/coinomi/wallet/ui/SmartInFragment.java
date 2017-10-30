@@ -21,6 +21,7 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.eth.CallTransaction;
 import com.coinomi.core.coins.eth.CallTransaction.Function;
 import com.coinomi.core.exceptions.AddressMalformedException;
+import com.coinomi.core.exceptions.ExecutionException;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
@@ -86,19 +87,14 @@ public class SmartInFragment extends Fragment {
         @JavascriptInterface
         public boolean executeFunction(String functionName, String value, String[] functionInputs) {
             try {
-                Function function = SmartInFragment.this.contract.getContract().getByName(functionName);
-                List<String> inputValues = new ArrayList();
-                for (String s : functionInputs) {
-                    inputValues.add(s);
-                }
-                Value amount = Value.parse(SmartInFragment.this.account.getCoinType().getFeeValue().type, value);
-                if (function.constant) {
-                    SmartInFragment.this.account.callContractFunction(SmartInFragment.this.contractId, function.name, inputValues, amount);
-                } else {
-                    SmartInFragment.this.onMakeTransaction(new EthAddress(SmartInFragment.this.account.getCoinType(), SmartInFragment.this.contractId), amount, Hex.toHexString(CallTransaction.createCallTransaction(0, 1, 1000000, SmartInFragment.this.contract.getContractAddress().replace("0x", ""), 0, SmartInFragment.this.contract.getContract().getByName(function.name), inputValues.toArray()).getData()));
+                String data = EthContract.executeFunction(SmartInFragment.this.account, SmartInFragment.this.contractId, functionName, value, functionInputs);
+                if (!(SmartInFragment.this.contract.getContract().getByName(functionName).constant || data == null)) {
+                    SmartInFragment.this.onMakeTransaction(SmartInFragment.this.type.newAddress(SmartInFragment.this.contractId), Value.parse(SmartInFragment.this.type, value), data);
                 }
                 return true;
-            } catch (Exception e) {
+            } catch (ExecutionException e) {
+                return false;
+            } catch (AddressMalformedException e2) {
                 return false;
             }
         }

@@ -91,4 +91,10 @@ abstract public class BaseWalletActivity extends AppCompatActivity {
     public boolean isChangingConfigurations() {
         return VERSION.SDK_INT >= 11 && super.isChangingConfigurations();
     }
+
+    public void setActionBarTitle(String actionBarTitle) {
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle((CharSequence) actionBarTitle);
+        }
+    }
 }

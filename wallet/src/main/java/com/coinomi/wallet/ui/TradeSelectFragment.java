@@ -1,6 +1,6 @@
 package com.coinomi.wallet.ui;
 
-import android.app.AlertDialog;
+import android.app.AlertDialog.Builder;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -9,42 +9,57 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import butterknife.OnClick;
+import butterknife.Unbinder;
 import com.coinomi.core.coins.CoinType;
-import com.coinomi.core.coins.PeercoinMain;
+import com.coinomi.core.coins.EthereumMain;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.exceptions.ExecutionException;
 import com.coinomi.core.exchange.shapeshift.ShapeShift;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftCoins;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftMarketInfo;
 import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
-import com.coinomi.wallet.Constants;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.R;
+import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.tasks.AddCoinTask;
 import com.coinomi.wallet.tasks.ExchangeCheckSupportedCoinsTask;
 import com.coinomi.wallet.tasks.MarketInfoPollTask;
+import com.coinomi.wallet.ui.Dialogs.ProgressDialogFragment;
 import com.coinomi.wallet.ui.adaptors.AvailableAccountsAdaptor;
+import com.coinomi.wallet.ui.adaptors.AvailableAccountsAdaptor.Entry;
 import com.coinomi.wallet.ui.dialogs.ConfirmAddCoinUnlockWalletDialog;
 import com.coinomi.wallet.ui.widget.AmountEditView;
 import com.coinomi.wallet.util.Keyboard;
+import com.coinomi.wallet.util.PoweredByUtil;
 import com.coinomi.wallet.util.ThrottlingWalletChangeListener;
 import com.coinomi.wallet.util.WeakHandler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Timer;
 import org.acra.ACRA;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.KeyCrypterException;
@@ -52,74 +67,241 @@ import org.bitcoinj.utils.Threading;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Timer;
-
-import javax.annotation.Nullable;
-
-import butterknife.BindView;
-import butterknife.ButterKnife;
-import butterknife.OnClick;
-import butterknife.Unbinder;
-
-import static com.coinomi.core.coins.Value.canCompare;
-
-/**
- * @author John L. Jegutanis
- */
-public class TradeSelectFragment extends Fragment implements ExchangeCheckSupportedCoinsTask.Listener, AddCoinTask.Listener {
+public class TradeSelectFragment extends Fragment implements com.coinomi.wallet.tasks.AddCoinTask.Listener, com.coinomi.wallet.tasks.ExchangeCheckSupportedCoinsTask.Listener {
     private static final Logger log = LoggerFactory.getLogger(TradeSelectFragment.class);
-
-    private static final int UPDATE_MARKET = 0;
-    private static final int UPDATE_MARKET_ERROR = 1;
-    private static final int UPDATE_WALLET = 2;
-    private static final int VALIDATE_AMOUNT = 3;
-    private static final int INITIAL_TASK_ERROR = 4;
-    private static final int UPDATE_AVAILABLE_COINS = 5;
-
-    private static final String INITIAL_TASK_BUSY_DIALOG_TAG = "initial_task_busy_dialog_tag";
-    private static final String ADD_COIN_TASK_BUSY_DIALOG_TAG = "add_coin_task_busy_dialog_tag";
-    private static final String ADD_COIN_DIALOG_TAG = "add_coin_dialog_tag";
-
-    // UI & misc
-    private WalletApplication application;
-    private Wallet wallet;
-    private final Handler handler = new MyHandler(this);
-    private final AmountListener amountsListener = new AmountListener(handler);
-    private final AccountListener sourceAccountListener = new AccountListener(handler);
-    @Nullable private Listener listener;
-    @Nullable private MenuItem actionSwapMenu;
-    @BindView(2131689785) Spinner sourceSpinner;
-    @BindView(2131689786) Spinner destinationSpinner;
-    private AvailableAccountsAdaptor sourceAdapter;
-    private AvailableAccountsAdaptor destinationAdapter;
-    @BindView(2131689788) AmountEditView sourceAmountView;
-    @BindView(2131689789) AmountEditView destinationAmountView;
-    private CurrencyCalculatorLink amountCalculatorLink;
-    @BindView(2131689750) TextView amountError;
-    @BindView(2131689751) TextView amountWarning;
-    @BindView(2131689685) Button nextButton;
-    private Unbinder unbinder;
-    // Tasks
-    private MarketInfoTask marketTask;
-    private ExchangeCheckSupportedCoinsTask initialTask;
-    private Timer timer;
-    private MyMarketInfoPollTask pollTask;
+    private MenuItem actionSwapMenu;
     private AddCoinTask addCoinAndProceedTask;
+    private CurrencyCalculatorLink amountCalculatorLink;
+    @BindView(2131689754)
+    TextView amountError;
+    @BindView(2131689755)
+    TextView amountWarning;
+    private final AmountListener amountsListener = new AmountListener(this.handler);
+    private WalletApplication application;
+    private Entry destination;
+    private AvailableAccountsAdaptor destinationAdapter;
+    @BindView(2131689803)
+    AmountEditView destinationAmountView;
+    @BindView(2131689794)
+    Spinner destinationSpinner;
+    private String exchange;
+    private final Handler handler = new MyHandler(this);
+    private ExchangeCheckSupportedCoinsTask initialTask;
+    private Value lastBalance;
+    private ExchangeRate lastRate;
+    private Listener listener;
+    private MarketInfoTask marketTask;
+    private Value maximumDeposit;
+    private Value minimumDeposit;
+    @BindView(2131689687)
+    Button nextButton;
+    private MyMarketInfoPollTask pollTask;
+    @BindView(2131689820)
+    TextView poweredBy;
+    private Value sendAmount;
+    private Entry source;
+    private final AccountListener sourceAccountListener = new AccountListener(this.handler);
+    private AvailableAccountsAdaptor sourceAdapter;
+    @BindView(2131689802)
+    AmountEditView sourceAmountView;
+    @BindView(2131689792)
+    Spinner sourceSpinner;
+    private Timer timer;
+    @BindView(2131689799)
+    TextView tradeInfo;
+    private Unbinder unbinder;
+    private Wallet wallet;
 
-    // State
-    private WalletAccount sourceAccount;
-    @Nullable private WalletAccount destinationAccount;
-    private CoinType destinationType;
-    @Nullable private Value sendAmount;
-    @Nullable private Value maximumDeposit;
-    @Nullable private Value minimumDeposit;
-    @Nullable private Value lastBalance;
-    @Nullable private ExchangeRate lastRate;
-    @OnClick({2131689747})
+    public interface Listener {
+        void onMakeTrade(WalletAccount walletAccount, CoinType coinType, WalletAccount walletAccount2, CoinType coinType2, Value value, String str);
+    }
+
+    class C05131 implements OnClickListener {
+        C05131() {
+        }
+
+        public void onClick(View v) {
+            TradeSelectFragment.this.validateAmount();
+            if (TradeSelectFragment.this.everythingValid()) {
+                TradeSelectFragment.this.onHandleNext();
+            } else if (TradeSelectFragment.this.amountCalculatorLink.isEmpty()) {
+                TradeSelectFragment.this.amountError.setText(R.string.amount_error_empty);
+                TradeSelectFragment.this.amountError.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    class C05142 implements DialogInterface.OnClickListener {
+        C05142() {
+        }
+
+        public void onClick(DialogInterface dialog, int which) {
+            TradeSelectFragment.this.initialTask = null;
+            TradeSelectFragment.this.maybeStartInitialTask();
+        }
+    }
+
+    class C05153 implements OnItemSelectedListener {
+        C05153() {
+        }
+
+        public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            Entry newSource = (Entry) parent.getSelectedItem();
+            if (!newSource.equals(TradeSelectFragment.this.source)) {
+                if (TradeSelectFragment.this.destination.equals(newSource)) {
+                    TradeSelectFragment.this.setDestinationSpinner(TradeSelectFragment.this.source);
+                    TradeSelectFragment.this.setDestination(TradeSelectFragment.this.source, false);
+                }
+                TradeSelectFragment.this.setSource(newSource, true);
+            }
+        }
+
+        public void onNothingSelected(AdapterView<?> adapterView) {
+        }
+    }
+
+    class C05164 implements OnItemSelectedListener {
+        C05164() {
+        }
+
+        public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+            Entry entry = (Entry) parent.getSelectedItem();
+            if (!entry.equals(TradeSelectFragment.this.destination)) {
+                if (TradeSelectFragment.this.source.equals(entry)) {
+                    TradeSelectFragment.this.setSourceSpinner(TradeSelectFragment.this.destination);
+                    TradeSelectFragment.this.setSource(TradeSelectFragment.this.destination, false);
+                }
+                TradeSelectFragment.this.setDestination(entry, true);
+            }
+        }
+
+        public void onNothingSelected(AdapterView<?> adapterView) {
+        }
+    }
+
+    class C05175 implements DialogInterface.OnClickListener {
+        C05175() {
+        }
+
+        public void onClick(DialogInterface dialog, int which) {
+            TradeSelectFragment.this.createToAccountAndProceed();
+        }
+    }
+
+    private static class AccountListener extends ThrottlingWalletChangeListener {
+        private final Handler handler;
+
+        private AccountListener(Handler handler) {
+            this.handler = handler;
+        }
+
+        public void onThrottledWalletChanged() {
+            this.handler.sendEmptyMessage(2);
+        }
+    }
+
+    private static class AmountListener implements com.coinomi.wallet.ui.widget.AmountEditView.Listener {
+        private final Handler handler;
+
+        private AmountListener(Handler handler) {
+            this.handler = handler;
+        }
+
+        public void changed() {
+            this.handler.sendMessage(this.handler.obtainMessage(3, Boolean.valueOf(true)));
+        }
+
+        public void focusChanged(boolean hasFocus) {
+            if (!hasFocus) {
+                this.handler.sendMessage(this.handler.obtainMessage(3, Boolean.valueOf(false)));
+            }
+        }
+    }
+
+    private static class MarketInfoTask extends AsyncTask<Void, Void, ShapeShiftMarketInfo> {
+        final Handler handler;
+        final String pair;
+        final ShapeShift shapeShift;
+
+        private MarketInfoTask(Handler handler, ShapeShift shift, String pair) {
+            this.shapeShift = shift;
+            this.handler = handler;
+            this.pair = pair;
+        }
+
+        protected ShapeShiftMarketInfo doInBackground(Void... params) {
+            return MarketInfoPollTask.getMarketInfoSync(this.shapeShift, this.pair);
+        }
+
+        protected void onPostExecute(ShapeShiftMarketInfo marketInfo) {
+            if (marketInfo != null) {
+                this.handler.sendMessage(this.handler.obtainMessage(0, marketInfo));
+            } else {
+                this.handler.sendEmptyMessage(1);
+            }
+        }
+    }
+
+    private static class MyHandler extends WeakHandler<TradeSelectFragment> {
+        public MyHandler(TradeSelectFragment referencingObject) {
+            super(referencingObject);
+        }
+
+        protected void weakHandleMessage(TradeSelectFragment ref, Message msg) {
+            switch (msg.what) {
+                case 0:
+                    ref.onMarketUpdate((ShapeShiftMarketInfo) msg.obj);
+                    return;
+                case 1:
+                    Toast.makeText(ref.getActivity(), ref.getString(R.string.trade_error_market_info, ref.source.getType().getName(), ref.destination.getType().getName()), Toast.LENGTH_LONG).show();
+                    return;
+                case 2:
+                    ref.onWalletUpdate();
+                    return;
+                case 3:
+                    ref.validateAmount(((Boolean) msg.obj).booleanValue());
+                    return;
+                case 4:
+                    ref.showInitialTaskErrorDialog((String) msg.obj);
+                    return;
+                case 5:
+                    ref.updateAvailableCoins((ShapeShiftCoins) msg.obj);
+                    ref.startMarketInfoTask();
+                    return;
+                default:
+                    return;
+            }
+        }
+    }
+
+    private static class MyMarketInfoPollTask extends MarketInfoPollTask {
+        private final Handler handler;
+
+        MyMarketInfoPollTask(Handler handler, ShapeShift shapeShift, String pair) {
+            super(shapeShift, pair);
+            this.handler = handler;
+        }
+
+        public void onHandleMarketInfo(ShapeShiftMarketInfo marketInfo) {
+            this.handler.sendMessage(this.handler.obtainMessage(0, marketInfo));
+        }
+    }
+
+    @OnClick({2131689751})
     public void onEmptyWalletClick() {
         setAmountForEmptyWallet();
+    }
+
+    @OnClick({2131689801})
+    public void onPreciseClick() {
+        if (this.exchange.equals("shapeshift")) {
+            if (this.amountCalculatorLink.getExchangeDirection()) {
+                Value preciseAmount = this.amountCalculatorLink.getSecondaryAmount();
+                this.amountCalculatorLink.setExchangeDirection(false);
+                this.amountCalculatorLink.setSecondaryAmount(preciseAmount);
+            }
+            this.destinationAmountView.requestFocus();
+        }
     }
 
     private void setAmountForEmptyWallet() {
@@ -134,193 +316,134 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
         }
     }
 
-    /** Required empty public constructor */
-    public TradeSelectFragment() {}
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Android callback methods
-
-    @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setHasOptionsMenu(true);
-        setRetainInstance(true); // Retain fragment as we are running async tasks
-
-        // Select some default coins
-        sourceAccount = application.getAccount(application.getConfiguration().getLastAccountId());
+        setRetainInstance(true);
+        WalletAccount sourceAccount = this.application.getAccount(this.application.getConfiguration().getLastAccountId());
         if (sourceAccount == null) {
-            List<WalletAccount> accounts = application.getAllAccounts();if (accounts.size() == 0) {
+            List<WalletAccount> accounts = this.application.getAllAccounts();
+            if (accounts.size() == 0) {
                 getActivity().finish();
                 return;
             }
-            sourceAccount = accounts.get(0);
+            sourceAccount = (WalletAccount) accounts.get(0);
         }
-
-        // Find a destination coin that is different than the source coin
+        this.source = new Entry(sourceAccount);
+        if (savedInstanceState != null) {
+            this.exchange = savedInstanceState.containsKey("exchange_id") ? savedInstanceState.getString("exchange_id") : "shapeshift";
+        } else if (getArguments() != null) {
+            Bundle args = getArguments();
+            this.exchange = args.containsKey("exchange_id") ? args.getString("exchange_id") : "shapeshift";
+        } else {
+            this.exchange = "shapeshift";
+        }
         for (CoinType type : Constants.SUPPORTED_COINS) {
-            if (type.equals(sourceAccount.getCoinType())) continue;
-            destinationType = type;
-            break;
+            if (!type.equals(this.source.getType())) {
+                this.destination = new Entry(type);
+                break;
+            }
         }
-
         updateBalance();
     }
 
-    @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-                             Bundle savedInstanceState) {
-        // Inflate the layout for this fragment
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_trade_select, container, false);
-        unbinder = ButterKnife.bind((Object) this, view);
-        sourceSpinner = (Spinner) view.findViewById(R.id.from_coin);
-        sourceSpinner.setAdapter(getSourceSpinnerAdapter());
-        sourceSpinner.setOnItemSelectedListener(getSourceSpinnerListener());
-
-        destinationSpinner = (Spinner) view.findViewById(R.id.to_coin);
-        destinationSpinner.setAdapter(getDestinationSpinnerAdapter());
-        destinationSpinner.setOnItemSelectedListener(getDestinationSpinnerListener());
-
-        sourceAmountView = (AmountEditView) view.findViewById(R.id.trade_coin_amount);
-        destinationAmountView = (AmountEditView) view.findViewById(R.id.receive_coin_amount);
-
-        amountCalculatorLink = new CurrencyCalculatorLink(sourceAmountView, destinationAmountView);
-
-//        receiveCoinWarning = (TextView) view.findViewById(R.id.warn_no_account_found);
-//        receiveCoinWarning.setVisibility(View.GONE);
-//        addressError = (TextView) view.findViewById(R.id.address_error_message);
-//        addressError.setVisibility(View.GONE);
-        amountError = (TextView) view.findViewById(R.id.amount_error_message);
-        amountError.setVisibility(View.GONE);
-        amountWarning = (TextView) view.findViewById(R.id.amount_warning_message);
-        amountWarning.setVisibility(View.GONE);
-
-//        scanQrCodeButton = (ImageButton) view.findViewById(R.id.scan_qr_code);
-//        scanQrCodeButton.setOnClickListener(new View.OnClickListener() {
-//            @Override
-//            public void onClick(View v) {
-//                handleScan();
-//            }
-//        });
-
-        view.findViewById(R.id.powered_by_shapeshift).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                new AlertDialog.Builder(getActivity())
-                        .setTitle(R.string.about_shapeshift_title)
-                        .setMessage(R.string.about_shapeshift_message)
-                        .setPositiveButton(R.string.button_ok, null)
-                        .create().show();
-            }
-        });
-
-        nextButton = (Button) view.findViewById(R.id.button_next);
-        nextButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-//                validateAddress();
-                validateAmount();
-                if (everythingValid()) {
-                    onHandleNext();
-                } else if (amountCalculatorLink.isEmpty()) {
-                    amountError.setText(R.string.amount_error_empty);
-                    amountError.setVisibility(View.VISIBLE);
-                }
-            }
-        });
-
-        // Setup the default source & destination views
-        setSource(sourceAccount, false);
-        if (destinationAccount != null) {
-            setDestination(destinationAccount, false);
-        } else {
-            setDestination(destinationType, false);
+        this.unbinder = ButterKnife.bind((Object) this, view);
+        String exchangeName = getString(R.string.default_exchange);
+        if (this.exchange.equals("shapeshift")) {
+            exchangeName = getString(R.string.shapeshift);
+            this.tradeInfo.setText(R.string.trade_info_rates);
+            this.tradeInfo.setVisibility(View.VISIBLE);
+            PoweredByUtil.setup(getContext(), "shapeshift", this.poweredBy);
+            this.poweredBy.setVisibility(View.VISIBLE);
+        } else if (this.exchange.equals("changelly")) {
+            this.destinationAmountView.setEnabledAndFocusable(false);
+            ButterKnife.findById(view, (int) R.id.precise).setVisibility(View.GONE);
+            exchangeName = getString(R.string.changelly);
+            this.tradeInfo.setText(getString(R.string.trade_info_rates_no_tx_fee, exchangeName));
+            this.tradeInfo.setVisibility(View.VISIBLE);
+            PoweredByUtil.setup(getContext(), "changelly", this.poweredBy);
+            this.poweredBy.setVisibility(View.VISIBLE);
         }
-
-        if (!application.isConnected()) {
-            showInitialTaskErrorDialog(null);
-        } else {
+        FragmentActivity activity = getActivity();
+        if (activity != null && (activity instanceof BaseWalletActivity)) {
+            ((BaseWalletActivity) activity).setActionBarTitle(exchangeName);
+        }
+        this.sourceSpinner.setAdapter(getSourceSpinnerAdapter());
+        this.sourceSpinner.setOnItemSelectedListener(getSourceSpinnerListener());
+        this.destinationSpinner.setAdapter(getDestinationSpinnerAdapter());
+        this.destinationSpinner.setOnItemSelectedListener(getDestinationSpinnerListener());
+        this.amountCalculatorLink = new CurrencyCalculatorLink(this.sourceAmountView, this.destinationAmountView);
+        this.amountError.setVisibility(View.GONE);
+        this.amountWarning.setVisibility(View.GONE);
+        this.nextButton.setOnClickListener(new C05131());
+        if (this.application.isConnected()) {
             maybeStartInitialTask();
+        } else {
+            showInitialTaskErrorDialog(null);
         }
-
         return view;
     }
 
     private AvailableAccountsAdaptor getDestinationSpinnerAdapter() {
-        if (destinationAdapter == null) {
-            destinationAdapter = new AvailableAccountsAdaptor(getActivity());
+        if (this.destinationAdapter == null) {
+            this.destinationAdapter = new AvailableAccountsAdaptor(getActivity());
         }
-        return destinationAdapter;
+        return this.destinationAdapter;
     }
 
     private AvailableAccountsAdaptor getSourceSpinnerAdapter() {
-        if (sourceAdapter == null) {
-            sourceAdapter = new AvailableAccountsAdaptor(getActivity());
+        if (this.sourceAdapter == null) {
+            this.sourceAdapter = new AvailableAccountsAdaptor(getActivity());
         }
-        return sourceAdapter;
+        return this.sourceAdapter;
     }
 
-
-    @Override
-    public void onAttach(final Context context) {
+    public void onAttach(Context context) {
         super.onAttach(context);
         try {
             this.listener = (Listener) context;
             this.application = (WalletApplication) context.getApplicationContext();
-            this.wallet = application.getWallet();
+            this.wallet = this.application.getWallet();
         } catch (ClassCastException e) {
             throw new ClassCastException(context.getClass() + " must implement " + Listener.class);
         }
     }
 
-    @Override
     public void onDetach() {
         super.onDetach();
-        listener = null;
+        this.listener = null;
     }
+
     public void onDestroyView() {
         this.amountCalculatorLink = null;
-        unbinder.unbind();
+        this.unbinder.unbind();
         super.onDestroyView();
     }
-    @Override
+
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.trade, menu);
-        actionSwapMenu = menu.findItem(R.id.action_swap_coins);
+        this.actionSwapMenu = menu.findItem(R.id.action_swap_coins);
     }
 
-    @Override
     public void onPause() {
         stopPolling();
-
         removeSourceListener();
-
-        amountCalculatorLink.setListener(null);
-
+        this.amountCalculatorLink.setListener(null);
         super.onPause();
     }
 
-    @Override
     public void onResume() {
         super.onResume();
         startPolling();
-
-        amountCalculatorLink.setListener(amountsListener);
-
+        this.amountCalculatorLink.setListener(this.amountsListener);
         addSourceListener();
-
         updateNextButtonState();
     }
 
-
-    @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            // TODO allow to trade all coins
-//            case R.id.action_empty_wallet:
-//                setAmountForEmptyWallet();
-//                return true;
             case R.id.action_refresh:
                 refreshStartInitialTask();
                 return true;
@@ -328,508 +451,346 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
                 swapAccounts();
                 return true;
             case R.id.action_exchange_history:
-                startActivity(new Intent(getActivity(), ExchangeHistoryActivity.class));
+                Intent exchangeHistoryIntent = new Intent(getActivity(), ExchangeHistoryActivity.class);
+                exchangeHistoryIntent.putExtra("exchange_id", this.exchange);
+                startActivity(exchangeHistoryIntent);
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Methods
-
     private void onHandleNext() {
-        if (listener != null) {
-            if (destinationAccount == null) {
-                createToAccountAndProceed();
-            } else {
-                if (everythingValid()) {
-                    Keyboard.hideKeyboard(getActivity());
-                    listener.onMakeTrade(sourceAccount, destinationAccount, sendAmount);
-                } else {
-                    Toast.makeText(getActivity(), R.string.amount_error, Toast.LENGTH_LONG).show();
-                }
-            }
+        if (this.listener == null) {
+            return;
+        }
+        if (this.destination.getAccount() == null) {
+            createToAccountAndProceed();
+        } else if (everythingValid()) {
+            Keyboard.hideKeyboard(getActivity());
+            this.listener.onMakeTrade(this.source.getAccount(), this.source.getType(), this.destination.getAccount(), this.destination.getType(), this.sendAmount, this.exchange);
+        } else {
+            Toast.makeText(getActivity(), R.string.amount_error, Toast.LENGTH_LONG).show();
         }
     }
 
     private void createToAccountAndProceed() {
-        if (destinationType == null) {
+        if (this.destination.getType() == null) {
             Toast.makeText(getActivity(), R.string.error_generic, Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        ConfirmAddCoinUnlockWalletDialog.getInstance(destinationType, wallet.isEncrypted())
-                .show(getFragmentManager(), ADD_COIN_DIALOG_TAG);
-    }
-
-    /**
-     * Start account creation task and proceed
-     */
-    void maybeStartAddCoinAndProceedTask(@Nullable String description, @Nullable CharSequence password, List<ChildNumber> customPath) {
-        if (addCoinAndProceedTask == null) {
-            addCoinAndProceedTask = new AddCoinTask(this, destinationType, wallet, description, password, customPath);
-            addCoinAndProceedTask.execute();
+        } else {
+            ConfirmAddCoinUnlockWalletDialog.getInstance(this.destination.getType(), this.wallet.isEncrypted()).show(getFragmentManager(), "add_coin_dialog_tag");
         }
     }
 
-    @Override
+    void maybeStartAddCoinAndProceedTask(String description, CharSequence password, List<ChildNumber> customPath) {
+        if (this.addCoinAndProceedTask == null) {
+            this.addCoinAndProceedTask = new AddCoinTask(this, this.destination.getType(), this.wallet, description, password, customPath);
+            this.addCoinAndProceedTask.execute(new Void[0]);
+        }
+    }
+
     public void onAddCoinTaskStarted() {
-        Dialogs.ProgressDialogFragment.show(getFragmentManager(),
-                getResources().getString(R.string.adding_coin_working, destinationType.getName()),
-                ADD_COIN_TASK_BUSY_DIALOG_TAG);
+        ProgressDialogFragment.show(getFragmentManager(), getResources().getString(R.string.adding_coin_working, new Object[]{this.destination.getType().getName()}), "add_coin_task_busy_dialog_tag");
     }
 
-    @Override
     public void onAddCoinTaskFinished(Exception error, WalletAccount newAccount) {
-        if (Dialogs.dismissAllowingStateLoss(getFragmentManager(), ADD_COIN_TASK_BUSY_DIALOG_TAG)) return;
-
-        if (error != null) {
-            if (error instanceof KeyCrypterException) {
+        if (!Dialogs.dismissAllowingStateLoss(getFragmentManager(), "add_coin_task_busy_dialog_tag")) {
+            this.addCoinAndProceedTask = null;
+            if (error == null) {
+                this.destination = new Entry(newAccount);
+                this.destinationAdapter.updateAccount(newAccount);
+                onHandleNext();
+            } else if (error instanceof KeyCrypterException) {
                 showPasswordRetryDialog();
             } else {
-                ACRA.getErrorReporter().handleSilentException(error);
+                if (ACRA.isInitialised()) {
+                    ACRA.getErrorReporter().handleSilentException(error);
+                }
                 Toast.makeText(getActivity(), R.string.error_generic, Toast.LENGTH_LONG).show();
             }
-        } else {
-            destinationAccount = newAccount;
-            destinationType = newAccount.getCoinType();
-            onHandleNext();
         }
-        addCoinAndProceedTask = null;
     }
 
     private void addSourceListener() {
-        sourceAccount.addEventListener(sourceAccountListener, Threading.SAME_THREAD);
-        onWalletUpdate();
+        WalletAccount account = this.source.getAccount();
+        if (account != null) {
+            account.addEventListener(this.sourceAccountListener, Threading.SAME_THREAD);
+            onWalletUpdate();
+        }
     }
 
     private void removeSourceListener() {
-        sourceAccount.removeEventListener(sourceAccountListener);
-        sourceAccountListener.removeCallbacks();
+        WalletAccount account = this.source.getAccount();
+        if (account != null) {
+            account.removeEventListener(this.sourceAccountListener);
+            this.sourceAccountListener.removeCallbacks();
+        }
     }
 
-    /**
-     * Start polling for the market information of the current pair, if it is already stated this
-     * call does nothing
-     */
     private void startPolling() {
-        if (timer == null) {
-            ShapeShift shapeShift = application.getShapeShift();
-            pollTask = new MyMarketInfoPollTask(handler, shapeShift, getPair());
-            timer = new Timer();
-            timer.schedule(pollTask, 0, Constants.RATE_UPDATE_FREQ_MS);
+        if (this.timer == null) {
+            this.pollTask = new MyMarketInfoPollTask(this.handler, this.application.getShapeShift(this.exchange), getPair());
+            this.timer = new Timer();
+            this.timer.schedule(this.pollTask, 0, 30000);
         }
     }
 
-    /**
-     * Stop the polling for the market info, if it is already stop this call does nothing
-     */
     private void stopPolling() {
-        if (timer != null) {
-            timer.cancel();
-            timer.purge();
-            timer = null;
-            pollTask.cancel();
-            pollTask = null;
+        if (this.timer != null) {
+            this.timer.cancel();
+            this.timer.purge();
+            this.timer = null;
+            this.pollTask.cancel();
+            this.pollTask = null;
         }
     }
 
-    /**
-     * Updates the spinners to include only available and supported coins
-     */
     private void updateAvailableCoins(ShapeShiftCoins availableCoins) {
-        List<CoinType> supportedTypes = getSupportedTypes(availableCoins.availableCoinTypes);
-        List<WalletAccount> allAccounts = application.getAllAccounts();
-
-        sourceAdapter.update(allAccounts, supportedTypes, false);
-        List<CoinType> sourceTypes = sourceAdapter.getTypes();
-
-        // No supported source accounts found
+        List<CoinType> supportedTypes = getSupportedTypes(availableCoins.availableCoinTypes, false);
+        List<CoinType> favoriteTypes = getSupportedTypes(availableCoins.availableCoinTypes, true);
+        List<WalletAccount> allAccounts = this.application.getAllAccounts();
+        this.sourceAdapter.update(allAccounts, favoriteTypes, false);
+        List<CoinType> sourceTypes = this.sourceAdapter.getTypes();
         if (sourceTypes.size() == 0) {
-            new AlertDialog.Builder(getActivity())
-                    .setTitle(R.string.trade_error)
-                    .setMessage(R.string.trade_error_no_supported_source_accounts)
-                    .setPositiveButton(R.string.button_ok, null)
-                    .create().show();
+            new Builder(getActivity()).setTitle(R.string.trade_error).setMessage(R.string.trade_error_no_supported_source_accounts).setPositiveButton(R.string.button_ok, null).create().show();
             return;
         }
-
-        if (sourceSpinner.getSelectedItemPosition() == -1) {
-            if (sourceAccount != null && sourceAdapter.getAccountOrTypePosition(sourceAccount) != -1) {
-                sourceSpinner.setSelection(sourceAdapter.getAccountOrTypePosition(sourceAccount));
+        if (this.sourceSpinner.getSelectedItemPosition() == -1) {
+            if (this.sourceAdapter.getPosition(this.source) != -1) {
+                this.sourceSpinner.setSelection(this.sourceAdapter.getPosition(this.source));
             } else {
-                sourceSpinner.setSelection(0);
+                this.sourceSpinner.setSelection(0);
             }
         }
-        CoinType sourceType =
-                ((AvailableAccountsAdaptor.Entry) sourceSpinner.getSelectedItem()).getType();
-
-        // If we have only one source type, remove it as a destination
+        CoinType sourceType = ((Entry) this.sourceSpinner.getSelectedItem()).getType();
         if (sourceTypes.size() == 1) {
             ArrayList<CoinType> typesWithoutSourceType = Lists.newArrayList(supportedTypes);
             typesWithoutSourceType.remove(sourceType);
-            destinationAdapter.update(allAccounts, typesWithoutSourceType, true);
+            this.destinationAdapter.update(allAccounts, typesWithoutSourceType, true);
         } else {
-            destinationAdapter.update(allAccounts, supportedTypes, true);
+            this.destinationAdapter.update(allAccounts, supportedTypes, true);
         }
-
-        if (destinationSpinner.getSelectedItemPosition() == -1) {
-            for (AvailableAccountsAdaptor.Entry entry : destinationAdapter.getEntries()) {
-                // Select the first item that is of a different type than the source
+        if (this.destinationSpinner.getSelectedItemPosition() == -1) {
+            for (Entry entry : this.destinationAdapter.getEntries()) {
                 if (!sourceType.equals(entry.getType())) {
-                    int selectionIndex = destinationAdapter.getAccountOrTypePosition(
-                            entry.accountOrCoinType);
-                    destinationSpinner.setSelection(selectionIndex);
-                    break;
+                    this.destinationSpinner.setSelection(this.destinationAdapter.getPosition(entry));
+                    return;
                 }
             }
         }
     }
 
-    /**
-     * Show a no connectivity error
-     */
     private void showInitialTaskErrorDialog(String error) {
-        if (getActivity() == null) {
-            return;
-        }
-
-        DialogBuilder builder;
-        if (error == null) {
-            builder = DialogBuilder.warn(getActivity(), R.string.trade_warn_no_connection_title);
-            builder.setMessage(R.string.trade_warn_no_connection_message);
-        } else {
-            builder = DialogBuilder.warn(getActivity(), R.string.trade_error);
-            builder.setMessage(R.string.trade_error_service_not_available);if (ACRA.isInitialised()) {
-                ACRA.getErrorReporter().putCustomData("trade-error", error);
+        if (getActivity() != null) {
+            DialogBuilder builder;
+            if (error == null) {
+                builder = DialogBuilder.warn(getActivity(), R.string.trade_warn_no_connection_title);
+                builder.setMessage((int) R.string.trade_warn_no_connection_message);
+            } else {
+                builder = DialogBuilder.warn(getActivity(), R.string.trade_error);
+                builder.setMessage((int) R.string.trade_error_service_not_available);
+                if (ACRA.isInitialised()) {
+                    ACRA.getErrorReporter().putCustomData("trade-error", error);
+                }
             }
+            builder.setNegativeButton((int) R.string.button_dismiss, null);
+            builder.setPositiveButton((int) R.string.button_retry, new C05142());
+            builder.create().show();
         }
-
-        builder.setNegativeButton(R.string.button_dismiss, null);
-        builder.setPositiveButton(R.string.button_retry, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                initialTask = null;
-                maybeStartInitialTask();
-            }
-        });
-        builder.create().show();
     }
 
-    /**
-     * Returns a list of the supported coins from the list of the available coins
-     */
-    private List<CoinType> getSupportedTypes(List<CoinType> availableCoins) {
+    private List<CoinType> getSupportedTypes(List<CoinType> availableCoins, boolean favorites) {
         ImmutableList.Builder<CoinType> builder = ImmutableList.builder();
         for (CoinType supportedType : Constants.SUPPORTED_COINS) {
             if (availableCoins.contains(supportedType)) {
                 builder.add(supportedType);
             }
         }
+        for (WalletAccount wallet : this.application.getAccounts(EthereumMain.get())) {
+            if (wallet instanceof EthFamilyWallet) {
+                Collection<ERC20Token> tokens = new ArrayList();
+                if (favorites) {
+                    tokens = ((EthFamilyWallet) wallet).getERC20Favorites().values();
+                } else {
+                    tokens = ((EthFamilyWallet) wallet).getAllERC20Tokens().values();
+                }
+                for (ERC20Token token : tokens) {
+                    if (availableCoins.contains(token)) {
+                        builder.add(token);
+                    }
+                }
+            }
+        }
         return builder.build();
     }
 
     private void refreshStartInitialTask() {
-        if (initialTask != null) {
-            initialTask.cancel(true);
-            initialTask = null;
+        if (this.initialTask != null) {
+            this.initialTask.cancel(true);
+            this.initialTask = null;
         }
         maybeStartInitialTask();
     }
 
     private void maybeStartInitialTask() {
-        if (initialTask == null) {
-            initialTask = new ExchangeCheckSupportedCoinsTask(this, application);
-            initialTask.execute();
-        } else {
-
+        if (this.initialTask == null) {
+            this.initialTask = new ExchangeCheckSupportedCoinsTask(this, this.application, this.exchange);
+            this.initialTask.execute(new Void[0]);
         }
     }
 
-    @Override
     public void onExchangeCheckSupportedCoinsTaskStarted() {
-        Dialogs.ProgressDialogFragment.show(getFragmentManager(),
-                getString(R.string.contacting_exchange),
-                INITIAL_TASK_BUSY_DIALOG_TAG);
+        ProgressDialogFragment.show(getFragmentManager(), getString(R.string.contacting_exchange), "initial_task_busy_dialog_tag");
     }
 
-    @Override
     public void onExchangeCheckSupportedCoinsTaskFinished(Exception error, ShapeShiftCoins shapeShiftCoins) {
-        if (Dialogs.dismissAllowingStateLoss(getFragmentManager(), INITIAL_TASK_BUSY_DIALOG_TAG)) return;
-
-        if (error != null) {
-            log.warn("Could not get ShapeShift coins", error);
-            handler.sendMessage(handler.obtainMessage(INITIAL_TASK_ERROR, error.getMessage()));
-        } else {
-            if (shapeShiftCoins.isError) {
-                log.warn("Could not get ShapeShift coins: {}", shapeShiftCoins.errorMessage);
-                handler.sendMessage(handler.obtainMessage(INITIAL_TASK_ERROR, shapeShiftCoins.errorMessage));
+        if (!Dialogs.dismissAllowingStateLoss(getFragmentManager(), "initial_task_busy_dialog_tag")) {
+            if (error != null) {
+                log.warn("Could not get ShapeShift coins", (Throwable) error);
+                this.handler.sendMessage(this.handler.obtainMessage(4, error.getMessage()));
+            } else if (shapeShiftCoins.isError) {
+                log.warn("Could not get " + this.exchange + " coins: {}", shapeShiftCoins.errorMessage);
+                this.handler.sendMessage(this.handler.obtainMessage(4, shapeShiftCoins.errorMessage));
             } else {
-                handler.sendMessage(handler.obtainMessage(UPDATE_AVAILABLE_COINS, shapeShiftCoins));
+                this.handler.sendMessage(this.handler.obtainMessage(5, shapeShiftCoins));
             }
         }
     }
 
-    /**
-     * Starts a new task to query about the market of the currently selected pair.
-     * Notes:
-     *  - If a task is already running, this call will cancel it.
-     *  - If the fragment is detached, it will not run.
-     */
     private void startMarketInfoTask() {
-        if (marketTask != null) {
-            marketTask.cancel(true);
-            marketTask = null;
+        if (this.marketTask != null) {
+            this.marketTask.cancel(true);
+            this.marketTask = null;
         }
         if (getActivity() != null) {
-            marketTask = new MarketInfoTask(handler, application.getShapeShift(), getPair());
-            marketTask.execute();
+            this.marketTask = new MarketInfoTask(this.handler, this.application.getShapeShift(this.exchange), getPair());
+            this.marketTask.execute(new Void[0]);
         }
     }
 
-    /**
-     * Get the current source and destination pair
-     */
     private String getPair() {
-        return ShapeShift.getPair(sourceAccount.getCoinType(), destinationType);
+        return ShapeShift.getPair(this.source.getType(), this.destination.getType());
     }
 
-    /**
-     * Updates the exchange rate and limits for the specific market.
-     * Note: if the current pair is different that the marketInfo pair, do nothing
-     */
     private void onMarketUpdate(ShapeShiftMarketInfo marketInfo) {
-        // If not current pair, do nothing
-        if (!marketInfo.isPair(sourceAccount.getCoinType(), destinationType)) return;
-
-        maximumDeposit = marketInfo.limit;
-        minimumDeposit = marketInfo.minimum;
-
-        lastRate = marketInfo.rate;
-        amountCalculatorLink.setExchangeRate(lastRate);
-        if (amountCalculatorLink.isEmpty() && lastRate != null) {
-            Value hintValue = sourceAccount.getCoinType().oneCoin();
-            Value exchangedValue = lastRate.convert(hintValue);
-            Value minerFee100 = marketInfo.rate.minerFee.multiply(100);
-            // If hint value is too small, make it higher to get a no zero exchanged value and
-            // at least 10 times higher than the miner fee
-            for (int tries = 8; tries > 0 &&
-                    (exchangedValue.isZero() || exchangedValue.compareTo(minerFee100) < 0); tries--) {
-                hintValue = hintValue.multiply(10);
-                exchangedValue = lastRate.convert(hintValue);
-            }
-            amountCalculatorLink.setExchangeRateHints(hintValue);
-        }
-    }
-
-    /**
-     * Get the item selected listener for the source spinner. It will swap the accounts if the
-     * destination account is the same as the new source account.
-     */
-    private AdapterView.OnItemSelectedListener getSourceSpinnerListener() {
-        return new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                AvailableAccountsAdaptor.Entry entry =
-                        (AvailableAccountsAdaptor.Entry) parent.getSelectedItem();
-                if (entry.accountOrCoinType instanceof WalletAccount) {
-                    WalletAccount newSource = (WalletAccount) entry.accountOrCoinType;
-                    // If same account selected, do nothing
-                    if (newSource.equals(sourceAccount)) return;
-                    // If new source and destination are the same, swap accounts
-                    if (destinationAccount != null && destinationAccount.isType(newSource)) {
-                        // Swap accounts
-                        setDestinationSpinner(sourceAccount);
-                        setDestination(sourceAccount, false);
-                    }
-                    setSource(newSource, true);
-                } else {
-                    // Should not happen as "source" is always an account
-                    throw new IllegalStateException("Unexpected class: "
-                            + entry.accountOrCoinType.getClass());
+        if (marketInfo.isPair(this.source.getType(), this.destination.getType())) {
+            this.maximumDeposit = marketInfo.limit;
+            this.minimumDeposit = marketInfo.minimum;
+            this.lastRate = marketInfo.rate;
+            this.amountCalculatorLink.setExchangeRate(this.lastRate);
+            if (this.amountCalculatorLink.isEmpty() && this.lastRate != null) {
+                Value hintValue = this.source.getType().oneCoin();
+                Value exchangedValue = this.lastRate.convert(hintValue);
+                Value minerFee100 = marketInfo.rate.minerFee.multiply(100);
+                for (int tries = 8; tries > 0 && (exchangedValue.isZero() || exchangedValue.compareTo(minerFee100) < 0); tries--) {
+                    hintValue = hintValue.multiply(10);
+                    exchangedValue = this.lastRate.convert(hintValue);
                 }
+                this.amountCalculatorLink.setExchangeRateHints(hintValue);
             }
-
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        };
-    }
-
-    /**
-     * Get the item selected listener for the destination spinner. It will swap the accounts if the
-     * source account is the same as the new destination account.
-     */
-    private AdapterView.OnItemSelectedListener getDestinationSpinnerListener() {
-        return new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                AvailableAccountsAdaptor.Entry entry =
-                        (AvailableAccountsAdaptor.Entry) parent.getSelectedItem();
-                if (entry.accountOrCoinType instanceof WalletAccount) {
-                    WalletAccount newDestination = (WalletAccount) entry.accountOrCoinType;
-                    // If same account selected, do nothing
-                    if (newDestination.equals(destinationAccount)) return;
-                    // If new destination and source are the same, swap accounts
-                    if (destinationAccount != null && sourceAccount.isType(newDestination)) {
-                        // Swap accounts
-                        setSourceSpinner(destinationAccount);
-                        setSource(destinationAccount, false);
-                    }
-                    setDestination(newDestination, true);
-                } else if (entry.accountOrCoinType instanceof CoinType) {
-                    setDestination((CoinType) entry.accountOrCoinType, true);
-                } else {
-                    // Should not happen
-                    throw new IllegalStateException("Unexpected class: "
-                            + entry.accountOrCoinType.getClass());
-                }
-            }
-
-            @Override public void onNothingSelected(AdapterView<?> parent) {}
-        };
-    }
-
-    /**
-     * Selects an account on the sourceSpinner without calling the callback. If no account found in
-     * the adaptor, does not do anything
-     */
-    private void setSourceSpinner(WalletAccount account) {
-        int newPosition = sourceAdapter.getAccountOrTypePosition(account);
-
-        if (newPosition >= 0) {
-            AdapterView.OnItemSelectedListener cb = sourceSpinner.getOnItemSelectedListener();
-            sourceSpinner.setOnItemSelectedListener(null);
-            sourceSpinner.setSelection(newPosition);
-            sourceSpinner.setOnItemSelectedListener(cb);
         }
     }
 
-    /**
-     * Selects an account on the destinationSpinner without calling the callback. If no account
-     * found in the adaptor, does not do anything
-     */
-    private void setDestinationSpinner(Object accountOrType) {
-        int newPosition = destinationAdapter.getAccountOrTypePosition(accountOrType);
+    private OnItemSelectedListener getSourceSpinnerListener() {
+        return new C05153();
+    }
 
+    private OnItemSelectedListener getDestinationSpinnerListener() {
+        return new C05164();
+    }
+
+    private void setSourceSpinner(Entry source) {
+        int newPosition = this.sourceAdapter.getPosition(source);
         if (newPosition >= 0) {
-            AdapterView.OnItemSelectedListener cb = destinationSpinner.getOnItemSelectedListener();
-            destinationSpinner.setOnItemSelectedListener(null);
-            destinationSpinner.setSelection(newPosition);
-            destinationSpinner.setOnItemSelectedListener(cb);
+            OnItemSelectedListener cb = this.sourceSpinner.getOnItemSelectedListener();
+            this.sourceSpinner.setOnItemSelectedListener(null);
+            this.sourceSpinner.setSelection(newPosition);
+            this.sourceSpinner.setOnItemSelectedListener(cb);
         }
     }
 
-    /**
-     * Sets the source account and makes a network call to ask about the new pair.
-     * Note: this does not update the source spinner, use {@link #setSourceSpinner(WalletAccount)}
-     */
-    private void setSource(WalletAccount account, boolean startNetworkTask) {
+    private void setDestinationSpinner(Entry destination) {
+        int newPosition = this.destinationAdapter.getPosition(destination);
+        if (newPosition >= 0) {
+            OnItemSelectedListener cb = this.destinationSpinner.getOnItemSelectedListener();
+            this.destinationSpinner.setOnItemSelectedListener(null);
+            this.destinationSpinner.setSelection(newPosition);
+            this.destinationSpinner.setOnItemSelectedListener(cb);
+        }
+    }
+
+    private void setSource(Entry source, boolean startNetworkTask) {
         removeSourceListener();
-        sourceAccount = account;
+        this.source = source;
         addSourceListener();
-
-        sourceAmountView.reset();
-        sourceAmountView.setType(sourceAccount.getCoinType());
-        sourceAmountView.setFormat(sourceAccount.getCoinType().getMoneyFormat());
-
-        amountCalculatorLink.setExchangeRate(null);
-
-        minimumDeposit = null;
-        maximumDeposit = null;
-
+        this.sourceAmountView.reset();
+        this.sourceAmountView.setType(source.getType());
+        this.amountCalculatorLink.setExchangeRate(null);
+        this.minimumDeposit = null;
+        this.maximumDeposit = null;
         updateOptionsMenu();
-
         if (startNetworkTask) {
             startMarketInfoTask();
-            if (pollTask != null) pollTask.updatePair(getPair());
-            application.maybeConnectAccount(sourceAccount);
+            if (this.pollTask != null) {
+                this.pollTask.updatePair(getPair());
+            }
+            this.application.maybeConnectAccount(source.getAccount());
         }
     }
 
-    /**
-     * Sets the destination account and makes a network call to ask about the new pair.
-     * Note: this does not update the destination spinner, use
-     * {@link #setDestinationSpinner(Object)}
-     */
-    private void setDestination(WalletAccount account, boolean startNetworkTask) {
-        setDestination(account.getCoinType(), false);
-        destinationAccount = account;
+    private void setDestination(Entry destination, boolean startNetworkTask) {
+        this.destination = destination;
+        this.destinationAmountView.reset();
+        this.destinationAmountView.setType(destination.getType());
+        this.amountCalculatorLink.setExchangeRate(null);
+        this.minimumDeposit = null;
+        this.maximumDeposit = null;
         updateOptionsMenu();
-
         if (startNetworkTask) {
             startMarketInfoTask();
-            if (pollTask != null) pollTask.updatePair(getPair());
+            if (this.pollTask != null) {
+                this.pollTask.updatePair(getPair());
+            }
         }
     }
 
-    /**
-     * Sets the destination coin type and makes a network call to ask about the new pair.
-     * Note: this does not update the destination spinner, use
-     * {@link #setDestinationSpinner(Object)}
-     */
-    private void setDestination(CoinType type, boolean startNetworkTask) {
-        destinationAccount = null;
-        destinationType = type;
-
-        destinationAmountView.reset();
-        destinationAmountView.setType(destinationType);
-        destinationAmountView.setFormat(destinationType.getMoneyFormat());
-
-        amountCalculatorLink.setExchangeRate(null);
-
-        minimumDeposit = null;
-        maximumDeposit = null;
-
-        updateOptionsMenu();
-
-        if (startNetworkTask) {
-            startMarketInfoTask();
-            if (pollTask != null) pollTask.updatePair(getPair());
-        }
-    }
-
-    /**
-     * Swap the source & destination accounts.
-     * Note: this works if the destination is an account, not a CoinType.
-     */
     private void swapAccounts() {
         if (isSwapAccountPossible()) {
-            WalletAccount newSource = destinationAccount;
-            WalletAccount newDestination = sourceAccount;
-
+            Entry newSource = this.destination;
+            Entry newDestination = this.source;
             setSourceSpinner(newSource);
             setDestinationSpinner(newDestination);
-
             setSource(newSource, false);
             setDestination(newDestination, true);
-        } else {
-            // Should not happen as we need to first check if isSwapAccountPossible() before showing
-            // a swap action to the user
-            Toast.makeText(getActivity(), R.string.error_generic,
-                    Toast.LENGTH_SHORT).show();
+            return;
         }
+        Toast.makeText(getActivity(), R.string.error_generic, Toast.LENGTH_SHORT).show();
     }
 
-    /**
-     * Check is if possible to perform the {@link #swapAccounts()} action
-     */
     private boolean isSwapAccountPossible() {
-        return destinationAccount != null;
+        return this.destination.getAccount() != null;
     }
 
-    /**
-     * Updates the options menu to take in to account the new selected accounts types, i.e. disable
-     * the swap action
-     */
     private void updateOptionsMenu() {
-        if (actionSwapMenu != null) {
-            actionSwapMenu.setEnabled(isSwapAccountPossible());
+        if (this.actionSwapMenu != null) {
+            this.actionSwapMenu.setEnabled(isSwapAccountPossible());
         }
     }
 
     private void updateBalance() {
-        lastBalance = sourceAccount.getBalance();
+        WalletAccount sourceAccount = this.source.getAccount();
+        if (sourceAccount == null) {
+            log.warn("Source account was null");
+            this.lastBalance = this.source.getType().zeroCoin();
+        } else if (this.source.getType() instanceof ERC20Token) {
+            try {
+                this.lastBalance = ((ERC20Token) this.source.getType()).getBalance((EthFamilyWallet) sourceAccount);
+            } catch (ExecutionException e) {
+                Toast.makeText(getActivity(), e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+            }
+        } else {
+            this.lastBalance = sourceAccount.getBalance();
+        }
     }
 
     private void onWalletUpdate() {
@@ -837,301 +798,137 @@ public class TradeSelectFragment extends Fragment implements ExchangeCheckSuppor
         validateAmount();
     }
 
-    /**
-     * Check if amount is within the minimum and maximum deposit limits and if is dust or if is more
-     * money than currently in the wallet
-     */
     private boolean isAmountWithinLimits(Value amount) {
-        boolean isWithinLimits = !amount.isDust();
-
-        // Check if within min & max deposit limits
-        if (isWithinLimits && minimumDeposit != null && maximumDeposit != null &&
-                minimumDeposit.isOfType(amount) && maximumDeposit.isOfType(amount)) {
-            isWithinLimits = amount.within(minimumDeposit, maximumDeposit);
+        boolean isWithinLimits;
+        if (amount.isDust()) {
+            isWithinLimits = false;
+        } else {
+            isWithinLimits = true;
         }
-
-        // Check if we have the amount
-        if (isWithinLimits && canCompare(lastBalance, amount)) {
-            isWithinLimits = amount.compareTo(lastBalance) <= 0;
+        if (isWithinLimits && this.minimumDeposit != null && this.maximumDeposit != null && this.minimumDeposit.isOfType(amount) && this.maximumDeposit.isOfType(amount)) {
+            isWithinLimits = amount.within(this.minimumDeposit, this.maximumDeposit);
         }
-
-        return isWithinLimits;
+        if (!isWithinLimits || !Value.canCompare(this.lastBalance, amount)) {
+            return isWithinLimits;
+        }
+        if (amount.compareTo(this.lastBalance) <= 0) {
+            return true;
+        }
+        return false;
     }
 
-    /**
-     * Check if amount is smaller than the dust limit or if applicable, the minimum deposit.
-     */
     private boolean isAmountTooSmall(Value amount) {
         return amount.compareTo(getLowestAmount(amount)) < 0;
     }
 
-    /**
-     * Get the lowest deposit or withdraw for the provided amount type
-     */
     private Value getLowestAmount(Value amount) {
         Value min = amount.type.getMinNonDust();
-        if (minimumDeposit != null) {
-            if (minimumDeposit.isOfType(min)) {
-                min = Value.max(minimumDeposit, min);
-            } else if (lastRate != null && lastRate.canConvert(amount.type, minimumDeposit.type)) {
-                min = Value.max(lastRate.convert(minimumDeposit), min);
-            }
+        if (this.minimumDeposit == null) {
+            return min;
         }
-        return min;
+        if (this.minimumDeposit.isOfType(min)) {
+            return Value.max(this.minimumDeposit, min);
+        }
+        if (this.lastRate == null || !this.lastRate.canConvert(amount.type, this.minimumDeposit.type)) {
+            return min;
+        }
+        return Value.max(this.lastRate.convert(this.minimumDeposit), min);
     }
 
-    /**
-     * Check if the amount is valid
-     */
     private boolean isAmountValid(Value amount) {
-        boolean isValid = amount != null && !amount.isDust();
-
-        if (isValid && amount.isOfType(sourceAccount.getCoinType())) {
-            isValid = isAmountWithinLimits(amount);
+        boolean isValid = (amount == null || amount.isDust()) ? false : true;
+        if (isValid && amount.isOfType(this.source.getType())) {
+            return isAmountWithinLimits(amount);
         }
-
         return isValid;
     }
 
-    /**
-     * {@inheritDoc #validateAmount(boolean)}
-     */
     private void validateAmount() {
         validateAmount(false);
     }
 
-    /**
-     * Validate amount and show errors if needed
-     */
     private void validateAmount(boolean isTyping) {
-        Value depositAmount = amountCalculatorLink.getPrimaryAmount();
-        Value withdrawAmount = amountCalculatorLink.getSecondaryAmount();
-        Value requestedAmount = amountCalculatorLink.getRequestedAmount();
-
+        Value depositAmount = this.amountCalculatorLink.getPrimaryAmount();
+        Value withdrawAmount = this.amountCalculatorLink.getSecondaryAmount();
+        Value requestedAmount = this.amountCalculatorLink.getRequestedAmount();
         if (isAmountValid(depositAmount) && isAmountValid(withdrawAmount)) {
-            sendAmount = requestedAmount;
-            amountError.setVisibility(View.GONE);
-            // Show warning that fees apply when entered the full amount inside the pocket
-            if (canCompare(lastBalance, depositAmount) && lastBalance.compareTo(depositAmount) == 0) {
-                amountWarning.setText(R.string.amount_warn_fees_apply);
-                amountWarning.setVisibility(View.VISIBLE);
+            this.sendAmount = requestedAmount;
+            this.amountError.setVisibility(View.GONE);
+            if (Value.canCompare(this.lastBalance, depositAmount) && this.lastBalance.compareTo(depositAmount) == 0) {
+                this.amountWarning.setText(R.string.amount_warn_fees_apply);
+                this.amountWarning.setVisibility(View.VISIBLE);
             } else {
-                amountWarning.setVisibility(View.GONE);
+                this.amountWarning.setVisibility(View.GONE);
             }
         } else {
-            amountWarning.setVisibility(View.GONE);
-            sendAmount = null;
-            boolean showErrors = shouldShowErrors(isTyping, depositAmount, withdrawAmount);
-            // ignore printing errors for null and zero amounts
-            if (showErrors) {
+            this.amountWarning.setVisibility(View.GONE);
+            this.sendAmount = null;
+            if (shouldShowErrors(isTyping, depositAmount, withdrawAmount)) {
                 if (depositAmount == null || withdrawAmount == null) {
-                    amountError.setText(R.string.amount_error);
+                    this.amountError.setText(R.string.amount_error);
                 } else if (depositAmount.isNegative() || withdrawAmount.isNegative()) {
-                    amountError.setText(R.string.amount_error_negative);
-                } else if (!isAmountWithinLimits(depositAmount) || !isAmountWithinLimits(withdrawAmount)) {
+                    this.amountError.setText(R.string.amount_error_negative);
+                } else if (isAmountWithinLimits(depositAmount) && isAmountWithinLimits(withdrawAmount)) {
+                    this.amountError.setText(R.string.amount_error);
+                } else {
                     String message = getString(R.string.error_generic);
-                    // If the amount is dust or lower than the deposit limit
                     if (isAmountTooSmall(depositAmount) || isAmountTooSmall(withdrawAmount)) {
                         Value minimumDeposit = getLowestAmount(depositAmount);
                         Value minimumWithdraw = getLowestAmount(withdrawAmount);
-                        message = getString(R.string.trade_error_min_limit,
-                                minimumDeposit.toFriendlyString() + " (" + minimumWithdraw
-                                        .toFriendlyString() + ")");
+                        message = getString(R.string.trade_error_min_limit, minimumDeposit.toFriendlyString() + " (" + minimumWithdraw.toFriendlyString() + ")");
                     } else {
-                        // If we have the amount
-                        if (canCompare(lastBalance, depositAmount) &&
-                                depositAmount.compareTo(lastBalance) > 0) {
-                            message = getString(R.string.amount_error_not_enough_money,
-                                    lastBalance.toFriendlyString());
+                        if (Value.canCompare(this.lastBalance, depositAmount) && depositAmount.compareTo(this.lastBalance) > 0) {
+                            message = getString(R.string.amount_error_not_enough_money, this.lastBalance.toFriendlyString());
                         }
-
-                        if (canCompare(maximumDeposit, depositAmount) &&
-                                depositAmount.compareTo(maximumDeposit) > 0) {
-
-                            String maxDepositString = maximumDeposit.toFriendlyString();
-                            if (lastRate != null &&
-                                    lastRate.canConvert(maximumDeposit.type, destinationType)) {
-                                maxDepositString += " (" + lastRate.convert(maximumDeposit)
-                                        .toFriendlyString() + ")";
+                        if (Value.canCompare(this.maximumDeposit, depositAmount) && depositAmount.compareTo(this.maximumDeposit) > 0) {
+                            String maxDepositString = this.maximumDeposit.toFriendlyString();
+                            if (this.lastRate != null && this.lastRate.canConvert(this.maximumDeposit.type, this.destination.getType())) {
+                                maxDepositString = maxDepositString + " (" + this.lastRate.convert(this.maximumDeposit).toFriendlyString() + ")";
                             }
                             message = getString(R.string.trade_error_max_limit, maxDepositString);
                         }
                     }
-                    amountError.setText(message);
-                } else { // Should not happen, but show a generic error
-                    amountError.setText(R.string.amount_error);
+                    this.amountError.setText(message);
                 }
-                amountError.setVisibility(View.VISIBLE);
+                this.amountError.setVisibility(View.VISIBLE);
             } else {
-                amountError.setVisibility(View.GONE);
+                this.amountError.setVisibility(View.GONE);
             }
         }
         updateNextButtonState();
     }
 
-    // TODO implement
     private boolean isOutputsValid() {
         return true;
     }
 
-
     private boolean everythingValid() {
-        return isOutputsValid() && isAmountValid(sendAmount);
+        return isOutputsValid() && isAmountValid(this.sendAmount);
     }
 
     private void updateNextButtonState() {
-//        nextButton.setEnabled(everythingValid());
     }
 
-    /**
-     * Decide if should show errors in the UI.
-     */
     private boolean shouldShowErrors(boolean isTyping, Value sending, Value receiving) {
-        if (canCompare(sending, lastBalance) && sending.compareTo(lastBalance) >= 0) {
+        if (Value.canCompare(sending, this.lastBalance) && sending.compareTo(this.lastBalance) > 0) {
             return true;
         }
-
-        if (isTyping) return false;
-        if (amountCalculatorLink.isEmpty()) return false;
-        if (sending != null && sending.isZero()) return false;
-        if (receiving != null && receiving.isZero()) return false;
+        if (isTyping) {
+            return false;
+        }
+        if (this.amountCalculatorLink.isEmpty()) {
+            return false;
+        }
+        if (sending == null || sending.isZero()) {
+            return false;
+        }
+        if (receiving == null || receiving.isZero()) {
+            return false;
+        }
         return true;
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Public classes and interfaces
-
-    public interface Listener {
-        void onMakeTrade(WalletAccount fromAccount, WalletAccount toAccount, Value amount);
-    }
-
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Private classes
-
-
-    private static class AmountListener implements AmountEditView.Listener {
-        private final Handler handler;
-
-        private AmountListener(Handler handler) {
-            this.handler = handler;
-        }
-
-        @Override
-        public void changed() {
-            handler.sendMessage(handler.obtainMessage(VALIDATE_AMOUNT, true));
-        }
-
-        @Override
-        public void focusChanged(final boolean hasFocus) {
-            if (!hasFocus) {
-                handler.sendMessage(handler.obtainMessage(VALIDATE_AMOUNT, false));
-            }
-        }
-    }
-
-    private static class AccountListener extends ThrottlingWalletChangeListener {
-        private final Handler handler;
-
-        private AccountListener(Handler handler) {
-            this.handler = handler;
-        }
-
-        @Override
-        public void onThrottledWalletChanged() {
-            handler.sendEmptyMessage(UPDATE_WALLET);
-        }
-    }
-
-    /**
-     * The fragment handler
-     */
-    private static class MyHandler extends WeakHandler<TradeSelectFragment> {
-        public MyHandler(TradeSelectFragment referencingObject) { super(referencingObject); }
-
-        @Override
-        protected void weakHandleMessage(TradeSelectFragment ref, Message msg) {
-            switch (msg.what) {
-                case UPDATE_MARKET:
-                    ref.onMarketUpdate((ShapeShiftMarketInfo) msg.obj);
-                    break;
-                case UPDATE_MARKET_ERROR:
-                    String errorMessage = ref.getString(R.string.trade_error_market_info,
-                            ref.sourceAccount.getCoinType().getName(),
-                            ref.destinationType.getName());
-                    Toast.makeText(ref.getActivity(), errorMessage, Toast.LENGTH_LONG).show();
-                    break;
-                case UPDATE_WALLET:
-                    ref.onWalletUpdate();
-                    break;
-                case VALIDATE_AMOUNT:
-                    ref.validateAmount((Boolean) msg.obj);
-                    break;
-                case INITIAL_TASK_ERROR:
-                    ref.showInitialTaskErrorDialog((String) msg.obj);
-                    break;
-                case UPDATE_AVAILABLE_COINS:
-                    ref.updateAvailableCoins((ShapeShiftCoins) msg.obj);
-                    ref.startMarketInfoTask();
-                    break;
-            }
-        }
-    }
-
-    /**
-     * Task to query about the market of a particular pair
-     */
-    private static class MarketInfoTask extends AsyncTask<Void, Void, ShapeShiftMarketInfo> {
-        final ShapeShift shapeShift;
-        final String pair;
-        final Handler handler;
-
-        private MarketInfoTask(Handler handler, ShapeShift shift, String pair) {
-            this.shapeShift = shift;
-            this.handler = handler;
-            this.pair = pair;
-        }
-
-        @Override
-        protected ShapeShiftMarketInfo doInBackground(Void... params) {
-            return MarketInfoPollTask.getMarketInfoSync(shapeShift, pair);
-        }
-
-        @Override
-        protected void onPostExecute(ShapeShiftMarketInfo marketInfo) {
-            if (marketInfo != null) {
-                handler.sendMessage(handler.obtainMessage(UPDATE_MARKET, marketInfo));
-            } else {
-                handler.sendEmptyMessage(UPDATE_MARKET_ERROR);
-            }
-        }
-    }
-
-    private static class MyMarketInfoPollTask extends MarketInfoPollTask {
-        private final Handler handler;
-
-        MyMarketInfoPollTask(Handler handler, ShapeShift shapeShift, String pair) {
-            super(shapeShift, pair);
-            this.handler = handler;
-        }
-
-        @Override
-        public void onHandleMarketInfo(ShapeShiftMarketInfo marketInfo) {
-            handler.sendMessage(handler.obtainMessage(UPDATE_MARKET, marketInfo));
-        }
-    }
-
     private void showPasswordRetryDialog() {
-        DialogBuilder.warn(getActivity(), R.string.unlocking_wallet_error_title)
-                .setMessage(R.string.unlocking_wallet_error_detail)
-                .setNegativeButton(R.string.button_cancel, null)
-                .setPositiveButton(R.string.button_retry, new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        createToAccountAndProceed();
-                    }
-                })
-                .create().show();
+        DialogBuilder.warn(getActivity(), R.string.unlocking_wallet_error_title).setMessage((int) R.string.unlocking_wallet_error_detail).setNegativeButton((int) R.string.button_cancel, null).setPositiveButton((int) R.string.button_retry, new C05175()).create().show();
     }
 }

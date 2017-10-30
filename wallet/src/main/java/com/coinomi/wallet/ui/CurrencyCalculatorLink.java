@@ -243,6 +243,13 @@ public final class CurrencyCalculatorLink {
         this.listener = listener;
     }
 
+    public void setSecondaryAmount(Value amount) {
+        Listener listener = this.listener;
+        this.listener = null;
+        this.localAmountView.setAmount(amount, true);
+        this.listener = listener;
+    }
+
     public boolean isEmpty() {
         return coinAmountView.getAmountText().isEmpty() && localAmountView.getAmountText().isEmpty();
     }

@@ -20,6 +20,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ListView;
 
+import com.coinomi.core.coins.CoinType;
 import com.coinomi.wallet.R;
 
 import java.util.List;
@@ -216,14 +217,19 @@ public class NavigationDrawerFragment extends Fragment {
 
             switch (item.itemType) {
                 case ITEM_COIN:
-                    listener.onAccountSelected((String) item.itemData);
+                    listener.onAccountSelected((String) item.itemData, null);
                     break;
                 case ITEM_TRADE:
-                    listener.onTradeSelected();
+                    listener.onTradeSelected((String) item.itemData);
                     break;
                 case ITEM_OVERVIEW:
                     listener.onOverviewSelected();
                     break;
+                case ITEM_SUBTYPE:
+                    this.listener.onAccountSelected((String) item.itemData, item.subType);
+                    return;
+                default:
+                    return;
             }
         }
     }
@@ -312,9 +318,9 @@ public class NavigationDrawerFragment extends Fragment {
      * Callbacks interface that all activities using this fragment must implement.
      */
     public interface Listener {
-        void onAccountSelected(String accountId);
+        void onAccountSelected(String str, CoinType coinType);
         void onAddCoinsSelected();
-        void onTradeSelected();
+        void onTradeSelected(String str);
         void onOverviewSelected();
     }
 }

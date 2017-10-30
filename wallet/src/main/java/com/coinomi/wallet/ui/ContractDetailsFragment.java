@@ -15,14 +15,18 @@ import android.widget.TextView;
 import android.widget.Toast;
 import butterknife.BindView;
 import butterknife.ButterKnife;
+import butterknife.OnClick;
 import butterknife.OnItemClick;
 import butterknife.Unbinder;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.eth.CallTransaction.Function;
+import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.util.MonetaryFormat;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthAddress;
 import com.coinomi.core.wallet.families.eth.EthContract;
 import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.Configuration;
@@ -32,6 +36,7 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.adaptors.ContractFunctionsListAdapter;
 import com.coinomi.wallet.ui.widget.Amount;
 import com.coinomi.wallet.util.ThrottlingAccountContractChangeListener;
+import com.coinomi.wallet.util.UiUtils;
 import com.coinomi.wallet.util.WeakHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +46,8 @@ public class ContractDetailsFragment extends Fragment {
     private EthFamilyWallet account;
     private String accountId;
     private EthContract contract;
+    @BindView(2131689698)
+    TextView contractAddress;
     @BindView(2131689696)
     Amount contractBalance;
     @BindView(2131689694)
@@ -123,6 +130,15 @@ public class ContractDetailsFragment extends Fragment {
         }
     }
 
+    public static ContractDetailsFragment newInstance(String accountId, ERC20Token subType) {
+        ContractDetailsFragment fragment = new ContractDetailsFragment();
+        Bundle args = new Bundle();
+        args.putString("account_id", accountId);
+        args.putString("contract_id", subType.getAddress());
+        fragment.setArguments(args);
+        return fragment;
+    }
+
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         if (getArguments() != null) {
@@ -148,6 +164,11 @@ public class ContractDetailsFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_contract_details, container, false);
         addHeaderAndFooterToList(inflater, container, view);
         this.unbinder = ButterKnife.bind((Object) this, view);
+        try {
+            contractAddress.setText(GenericUtils.addressSplitToGroups(new EthAddress(this.type, this.contractId)));
+        } catch (AddressMalformedException e) {
+            e.printStackTrace();
+        }
         this.contractDescription.setText(this.contract.getDescription());
         this.contractUrl.setText(this.contract.getOfficialSite());
         this.contractBalance.setSymbol(this.type.getSymbol());
@@ -182,12 +203,18 @@ public class ContractDetailsFragment extends Fragment {
         list.addFooterView(listFooter);
     }
 
+    @OnClick({2131689698})
+    public void onContractAddressClick() {
+        UiUtils.copy(getContext(), this.contractId);
+        Toast.makeText(getActivity(), getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show();
+    }
+
     @OnItemClick({2131689693})
     public void onItemClick(int position) {
         if (position >= this.contractFunctions.getHeaderViewsCount()) {
             Object obj = this.contractFunctions.getItemAtPosition(position);
             if (obj == null || !(obj instanceof Function)) {
-                Toast.makeText(getActivity(), getString(R.string.get_contract_info_error), 1).show();
+                Toast.makeText(getActivity(), getString(R.string.get_contract_info_error), Toast.LENGTH_LONG).show();
                 return;
             }
             Intent intent = new Intent(getActivity(), ContractFunctionActivity.class);

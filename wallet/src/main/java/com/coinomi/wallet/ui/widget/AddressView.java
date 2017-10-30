@@ -2,8 +2,10 @@ package com.coinomi.wallet.ui.widget;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.util.AttributeSet;
+import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
@@ -15,6 +17,7 @@ import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.util.WalletUtils;
+import com.squareup.picasso.Picasso;
 
 /**
  * @author John L. Jegutanis
@@ -41,7 +44,7 @@ public class AddressView extends LinearLayout {
                 R.styleable.Address, 0, 0);
         try {
             isMultiLine = a.getBoolean(R.styleable.Address_multi_line, false);
-            isIconShown = a.getBoolean(R.styleable.Address_show_coin_icon, false);   isNameShown = a.getBoolean(2, false);
+            isIconShown = a.getBoolean(R.styleable.Address_show_coin_icon, false);     isNameShown = a.getBoolean(2, false);
         } finally {
             a.recycle();
         }
@@ -101,7 +104,21 @@ public class AddressView extends LinearLayout {
         if (isIconShown) {
             iconView.setVisibility(VISIBLE);
             iconView.setContentDescription((address.getType()).getName());
+            if (!this.address.getType().isSubType()) {
             iconView.setImageResource(WalletUtils.getIconRes(address.getType()));
+                return;
+            } else if (this.address.getType().getIcon().startsWith("data:image")) {
+                byte[] decodedString = Base64.decode(this.address.getType().getIcon().replace("data:image/png;base64,", ""), 0);
+                this.iconView.setImageBitmap(BitmapFactory.decodeByteArray(decodedString, 0, decodedString.length));
+                return;
+            } else {
+                try {
+                    Picasso.with(getContext()).load(this.address.getType().getIcon()).into(this.iconView);
+                    return;
+                } catch (Exception e) {
+                    return;
+                }
+            }
         } else {
             iconView.setVisibility(GONE);
         }

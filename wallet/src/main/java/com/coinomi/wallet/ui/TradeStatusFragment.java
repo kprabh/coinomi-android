@@ -122,11 +122,13 @@ public class TradeStatusFragment extends Fragment {
         private final ShapeShift shapeShift;
         private final AbstractAddress depositAddress;
         private final Handler handler;
+        private final String txId;
 
-        private StatusPollTask(ShapeShift shapeShift, AbstractAddress depositAddress, Handler handler) {
+        private StatusPollTask(ShapeShift shapeShift, AbstractAddress depositAddress, String txId, Handler handler) {
             this.shapeShift = shapeShift;
             this.depositAddress = depositAddress;
             this.handler = handler;
+            this.txId = txId;
         }
 
         @Override
@@ -134,7 +136,7 @@ public class TradeStatusFragment extends Fragment {
             for (int tries = 3; tries > 0; tries--) {
                 try {
                     log.info("Polling status for deposit: {}", depositAddress);
-                    ShapeShiftTxStatus newStatus = shapeShift.getTxStatus(depositAddress);
+                    ShapeShiftTxStatus newStatus = shapeShift.getTxStatus(depositAddress, txId);
                     handler.sendMessage(handler.obtainMessage(UPDATE_SHAPESHIFT_STATUS, newStatus));
                     break;
                 } catch (ShapeShiftException e) {
@@ -251,7 +253,7 @@ public class TradeStatusFragment extends Fragment {
 
         updateView();
 
-        view.findViewById(R.id.powered_by_shapeshift).setOnClickListener(new View.OnClickListener() {
+        view.findViewById(R.id.powered_by).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 new AlertDialog.Builder(getActivity())
@@ -282,8 +284,8 @@ public class TradeStatusFragment extends Fragment {
 
     private void startPolling() {
         if (timer == null && exchangeStatus.status != ExchangeEntry.STATUS_COMPLETE) {
-            ShapeShift shapeShift = application.getShapeShift();
-            pollTask = new StatusPollTask(shapeShift, exchangeStatus.depositAddress, handler);
+            ShapeShift shapeShift = application.getShapeShift(this.exchangeStatus.exchange);
+            pollTask = new StatusPollTask(shapeShift, exchangeStatus.depositAddress,exchangeStatus.depositTransactionId, handler);
             timer = new Timer();
             timer.schedule(pollTask, 0, POLLING_MS);
         }

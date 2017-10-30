@@ -2,6 +2,7 @@ package com.coinomi.wallet.ui.dialogs;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.v4.app.DialogFragment;
@@ -32,6 +33,7 @@ public class ConfirmAddCoinUnlockWalletDialog extends DialogFragment {
     private static final String ASK_PASSWORD = "ask_password";
     private Listener listener;
 
+
     public static DialogFragment getInstance(CoinType type, boolean askPassword) {
         DialogFragment dialog = new ConfirmAddCoinUnlockWalletDialog();
         dialog.setArguments(new Bundle());
@@ -41,12 +43,12 @@ public class ConfirmAddCoinUnlockWalletDialog extends DialogFragment {
     }
 
     @Override
-    public void onAttach(Activity activity) {
-        super.onAttach(activity);
+    public void onAttach(Context context) {
+        super.onAttach(context);
         try {
-            listener = (Listener) activity;
+            listener = (Listener) context;
         } catch (ClassCastException e) {
-            throw new ClassCastException(activity.getClass() + " must implement " + Listener.class);
+            throw new ClassCastException(context.getClass() + " must implement " + Listener.class);
         }
     }
 

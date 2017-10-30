@@ -46,6 +46,12 @@ public class DialogBuilder extends AlertDialog.Builder {
         return builder;
     }
 
+    public static DialogBuilder info(Context context, String message) {
+        DialogBuilder builder = new DialogBuilder(context);
+        builder.setTitle((CharSequence) message);
+        return builder;
+    }
+
     public DialogBuilder(final Context context) {
         super(context);
 

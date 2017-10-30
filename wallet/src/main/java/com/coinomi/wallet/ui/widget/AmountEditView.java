@@ -104,7 +104,7 @@ public class AmountEditView extends LinearLayout {
         hint = null;
     }
 
-    public void resetType(CoinType type, boolean updateView) {
+    public void resetType(ValueType type, boolean updateView) {
         if (resetType(type) && updateView) updateAppearance();
     }
 
@@ -242,5 +242,10 @@ public class AmountEditView extends LinearLayout {
 
             if (listener != null && fire) listener.focusChanged(hasFocus);
         }
+    }
+
+    public void setEnabledAndFocusable(boolean enabled) {
+        this.amountText.setEnabled(enabled);
+        this.amountText.setFocusable(enabled);
     }
 }

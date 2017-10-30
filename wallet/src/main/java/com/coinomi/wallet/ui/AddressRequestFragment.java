@@ -138,16 +138,19 @@ public class AddressRequestFragment extends WalletFragment {
         return fragment;
     }
 
-    public static AddressRequestFragment newInstance(String accountId) {
-        return newInstance(accountId, null);
+    public static AddressRequestFragment newInstance(String accountId, CoinType subType) {
+        return newInstance(accountId, null, subType);
     }
 
     public static AddressRequestFragment newInstance(String accountId,
-                                                     @Nullable AbstractAddress showAddress) {
+                                                     @Nullable AbstractAddress showAddress, CoinType subType) {
         Bundle args = new Bundle();
         args.putString(Constants.ARG_ACCOUNT_ID, accountId);
         if (showAddress != null) {
             args.putSerializable(Constants.ARG_ADDRESS, showAddress);
+        }
+        if (subType != null) {
+            args.putSerializable("sub_coin_id", subType.getId());
         }
         return newInstance(args);
     }
@@ -178,6 +181,14 @@ public class AddressRequestFragment extends WalletFragment {
             return;
         }
         type = account.getCoinType();
+        if (getArguments().containsKey("sub_coin_id")) {
+            CoinType subType = this.account.getCoinType(getArguments().getString("sub_coin_id"));
+            if (subType == null) {
+                Toast.makeText(getActivity(), R.string.no_such_pocket_error, Toast.LENGTH_LONG).show();
+            } else {
+                this.type = subType;
+            }
+        }
     }
 
     @Override
@@ -341,7 +352,11 @@ public class AddressRequestFragment extends WalletFragment {
         if (showAddress != null) {
             receiveAddress =  showAddress;
         } else {
-            receiveAddress = account.getReceiveAddress();
+            try {
+                this.receiveAddress = this.type.newAddress(this.account.getReceiveAddress(this.config.isManualAddressManagement()).toString());
+            } catch (AddressMalformedException e) {
+                this.receiveAddress = this.account.getReceiveAddress(this.config.isManualAddressManagement());
+            }
         }
 
         // Don't show previous addresses link if we are showing a specific address
@@ -364,6 +379,11 @@ public class AddressRequestFragment extends WalletFragment {
         } else if (type instanceof NxtFamily){
             return CoinURI.convertToCoinURI(receiveAddress, amount, label, message,
                     account.getPublicKeySerialized());
+        } if (this.type instanceof EthFamily) {
+            return CoinURI.convertToCoinURI(this.receiveAddress, this.amount, this.label, this.message);
+        }
+        if (this.type instanceof CoinType) {
+            return CoinURI.convertToCoinURI(this.receiveAddress, this.amount, this.label, this.message);
         } else {
             throw new UnsupportedCoinTypeException(type);
         }

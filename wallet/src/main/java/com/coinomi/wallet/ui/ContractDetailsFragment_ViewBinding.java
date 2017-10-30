@@ -6,6 +6,7 @@ import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ListView;
 import android.widget.TextView;
 import butterknife.Unbinder;
+import butterknife.internal.DebouncingOnClickListener;
 import butterknife.internal.Utils;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.ui.widget.Amount;
@@ -13,6 +14,7 @@ import com.coinomi.wallet.ui.widget.Amount;
 public class ContractDetailsFragment_ViewBinding<T extends ContractDetailsFragment> implements Unbinder {
     protected T target;
     private View view2131689693;
+    private View view2131689698;
 
     public ContractDetailsFragment_ViewBinding(final T target, View source) {
         this.target = target;
@@ -28,6 +30,14 @@ public class ContractDetailsFragment_ViewBinding<T extends ContractDetailsFragme
         });
         target.contractDescription = (TextView) Utils.findRequiredViewAsType(source, R.id.contract_description, "field 'contractDescription'", TextView.class);
         target.contractUrl = (TextView) Utils.findRequiredViewAsType(source, R.id.contract_url, "field 'contractUrl'", TextView.class);
+        view = Utils.findRequiredView(source, R.id.contract_row_address, "field 'contractAddress' and method 'onContractAddressClick'");
+        target.contractAddress = (TextView) Utils.castView(view, R.id.contract_row_address, "field 'contractAddress'", TextView.class);
+        this.view2131689698 = view;
+        view.setOnClickListener(new DebouncingOnClickListener() {
+            public void doClick(View p0) {
+                target.onContractAddressClick();
+            }
+        });
     }
 
     public void unbind() {
@@ -40,6 +50,7 @@ public class ContractDetailsFragment_ViewBinding<T extends ContractDetailsFragme
         target.contractFunctions = null;
         target.contractDescription = null;
         target.contractUrl = null;
+        target.contractAddress = null;
         ((AdapterView) this.view2131689693).setOnItemClickListener(null);
         this.view2131689693 = null;
         this.target = null;

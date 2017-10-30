@@ -31,6 +31,7 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.FiatType;
@@ -40,6 +41,7 @@ import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.coins.families.NxtFamily;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.exceptions.NoSuchPocketException;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.exchange.shapeshift.ShapeShift;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftMarketInfo;
 import com.coinomi.core.messages.MessageFactory;
@@ -50,6 +52,8 @@ import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.Constants;
@@ -132,6 +136,7 @@ public class SendFragment extends WalletFragment {
     @Nullable private Value lastBalance; // TODO setup wallet watcher for the latest balance
     private State state = State.INPUT;
     private AbstractAddress address;
+    private boolean addressFromTypeCanChange;
     private boolean addressTypeCanChange;
     private Value sendAmount;
     private CoinType sendAmountType;
@@ -169,6 +174,7 @@ public class SendFragment extends WalletFragment {
     EditViewListener txMessageViewTextChangeListener;
     Listener listener;
     ContentResolver resolver;
+    private CoinType subType;
 
     /**
      * Use this factory method to create a new instance of
@@ -189,13 +195,15 @@ public class SendFragment extends WalletFragment {
      * Use this factory method to create a new instance of
      * this fragment using a URI.
      *
-     * @param uri the payment uri
      * @return A new instance of fragment WalletSendCoins.
      */
-    public static SendFragment newInstance(String accountId, CoinURI uri) {
+    public static SendFragment newInstance(String accountId, CoinType subType) {
         SendFragment fragment = new SendFragment();
         Bundle args = new Bundle();
-        args.putString(Constants.ARG_URI, uri.toString());
+        args.putSerializable("account_id", accountId);
+        if (subType != null) {
+        args.putString("sub_coin_id", subType.getId());
+        }
         fragment.setArguments(args);
         return fragment;
     }
@@ -222,14 +230,15 @@ public class SendFragment extends WalletFragment {
                 String accountId = args.getString(Constants.ARG_ACCOUNT_ID);
                 a = checkNotNull(application.getAccount(accountId));
             }
-
-            if (args.containsKey(Constants.ARG_URI)) {
+            if (args.containsKey("test_wallet")) {
                 try {
-                    processUri(args.getString(Constants.ARG_URI));
+                    processUri(args.getString("test_wallet"));
                 } catch (CoinURIParseException e) {
                     // TODO handle more elegantly
                     Toast.makeText(getActivity(), e.getMessage(), Toast.LENGTH_LONG).show();
-                    ACRA.getErrorReporter().handleException(e);
+                    if (ACRA.isInitialised()) {
+                        ACRA.getErrorReporter().handleException(e);
+                    }
                 }
             }
 
@@ -239,8 +248,10 @@ public class SendFragment extends WalletFragment {
                 List<WalletAccount> accounts = application.getAllAccounts();
                 if (accounts.size() > 0) a = accounts.get(0);
                 if (a == null) {
-                    ACRA.getErrorReporter().putCustomData("wallet-exists",
-                            application.getWallet() == null ? "no" : "yes");
+                    if (ACRA.isInitialised()) {
+                        ACRA.getErrorReporter().putCustomData("wallet-exists",
+                                application.getWallet() == null ? "no" : "yes");
+                    }
                     Toast.makeText(getActivity(), R.string.no_such_pocket_error,
                             Toast.LENGTH_LONG).show();
                     getActivity().finish();
@@ -248,6 +259,21 @@ public class SendFragment extends WalletFragment {
                 }
             }
             checkNotNull(a, "No account selected");
+            if (args.containsKey("sub_coin_id")) {
+                try {
+                    this.subType = CoinID.typeFromId(args.getString("sub_coin_id"));
+                } catch (UnsupportedCoinTypeException e2) {
+                    Toast.makeText(getActivity(), R.string.no_such_pocket_error, Toast.LENGTH_LONG).show();
+                    getActivity().finish();
+                    return;
+                }
+            }
+            this.account = a;
+            if (this.subType != null) {
+                this.sendAmountType = this.subType;
+            } else {
+                this.sendAmountType = a.getCoinType();
+            }
         } else {
             throw new RuntimeException("Must provide account ID or a payment URI");
         }
@@ -261,6 +287,8 @@ public class SendFragment extends WalletFragment {
             addressTypeCanChange = savedInstanceState.getBoolean(STATE_ADDRESS_CAN_CHANGE_TYPE);
             sendAmount = (Value) savedInstanceState.getSerializable(STATE_AMOUNT);
             sendAmountType = (CoinType) savedInstanceState.getSerializable(STATE_AMOUNT_TYPE);
+            subType = (CoinType) savedInstanceState.getSerializable("sub_type");
+            addressTypeCanChange = savedInstanceState.getBoolean("address_from_can_change_type");
         }
 
         updateBalance();
@@ -301,7 +329,11 @@ public class SendFragment extends WalletFragment {
 
     private void updateBalance() {
         if (account != null) {
-            lastBalance = account.getBalance();
+            if (subType == null) {
+                lastBalance = account.getBalance();
+            } else {
+                lastBalance = account.getBalance(subType);
+            }
         }
     }
 
@@ -493,7 +525,11 @@ public class SendFragment extends WalletFragment {
     private void clearAddress(boolean clearTextField) {
         address = null;
         if (clearTextField) setSendToAddressText(null);
-        sendAmountType = account.getCoinType();
+        if (this.subType != null) {
+            this.sendAmountType = this.subType;
+        } else {
+            this.sendAmountType = this.account.getCoinType();
+        }
         addressTypeCanChange = false;
     }
 
@@ -508,11 +544,18 @@ public class SendFragment extends WalletFragment {
         outState.putBoolean(STATE_ADDRESS_CAN_CHANGE_TYPE, addressTypeCanChange);
         outState.putSerializable(STATE_AMOUNT, sendAmount);
         outState.putSerializable(STATE_AMOUNT_TYPE, sendAmountType);
+        outState.putBoolean("address_from_can_change_type", this.addressFromTypeCanChange);
     }
 
     private void startOrStopMarketRatePolling() {
+        CoinType fromType;
+        if (this.subType != null) {
+            fromType = this.subType;
+        } else {
+            fromType = this.account.getCoinType();
+        }
         if (address != null && !account.isType(address)) {
-            String pair = ShapeShift.getPair(account.getCoinType(), address.getType());
+            String pair = ShapeShift.getPair(fromType, address.getType());
             if (timer == null) {
                 startPolling(pair);
             } else {
@@ -575,7 +618,22 @@ public class SendFragment extends WalletFragment {
         state = State.PREPARATION;
         updateView();
         if (application.getWallet() != null) {
-            onMakeTransaction(address, sendAmount, getTxMessage());
+            if (this.subType == null) {
+                onMakeTransaction(this.address, this.sendAmount, getTxMessage());
+                return;
+            } else if ((this.subType instanceof ERC20Token) && (this.account instanceof EthFamilyWallet)) {
+                ERC20Token t = (ERC20Token)this.subType;
+                CoinType p = t.getParentType();
+                Preconditions.checkState(this.account.getCoinType().equals(p));
+                try {
+                    onMakeTransaction(p.newAddress(t.getAddress()), p.zeroCoin(), t.transfer((EthFamilyWallet) this.account, this.address, this.sendAmount));
+                    return;
+                } catch (AddressMalformedException e) {
+                    throw new RuntimeException("Could not create EthAddress from contract address " + t.getAddress());
+                }
+            } else {
+                throw new RuntimeException("Unsupported subtype " + this.subType.getClass());
+            }
         }
     }
 
@@ -586,7 +644,9 @@ public class SendFragment extends WalletFragment {
             try {
                 return messageFactory.createPublicMessage(message);
             } catch (Exception e) { // Should not happen
-                ACRA.getErrorReporter().handleSilentException(e);
+                if (ACRA.isInitialised()) {
+                    ACRA.getErrorReporter().handleSilentException(e);
+                }
             }
         }
         return null;
@@ -607,6 +667,22 @@ public class SendFragment extends WalletFragment {
 
         startActivityForResult(intent, SIGN_TRANSACTION);
         state = State.INPUT;
+    }
+
+    public void onMakeTransaction(AbstractAddress toAddress, Value amount, String contractData) {
+        Intent intent = new Intent(getActivity(), SignTransactionActivity.class);
+        if (amount.compareTo(this.account.getBalance()) == 0) {
+            intent.putExtra("empty_wallet", true);
+        } else {
+            intent.putExtra("send_value", amount);
+        }
+        intent.putExtra("account_id", this.account.getId());
+        intent.putExtra("send_to_address", toAddress);
+        if (contractData != null) {
+            intent.putExtra("contract_data", contractData);
+        }
+        startActivityForResult(intent, 1);
+        this.state = State.INPUT;
     }
 
     public void reset() {
@@ -696,10 +772,10 @@ public class SendFragment extends WalletFragment {
         if (getView() == null) return;
 
         // TODO rework the address request standard
-//        if (coinUri.isAddressRequest() && coinUri.getTypeRequired().equals(account.getCoinType())) {
-//            UiUtils.replyAddressRequest(getActivity(), coinUri, account);
-//            return;
-//        }
+        if (coinUri.isAddressRequest() && coinUri.getTypeRequired().equals(account.getCoinType())) {
+            UiUtils.replyAddressRequest(getActivity(), coinUri, account);
+            return;
+        }
 
         setUri(coinUri);
 
@@ -723,8 +799,12 @@ public class SendFragment extends WalletFragment {
             throw new CoinURIParseException("missing address");
         }
 
-        sendAmountType = address.getType();
-        sendAmount = coinUri.getAmount();
+        if (this.subType != null) {
+            this.sendAmountType = this.subType;
+        } else {
+            this.sendAmountType = this.address.getType();
+            this.sendAmount = coinUri.getAmount();
+        }
         final String label = coinUri.getLabel();
     }
 
@@ -792,8 +872,13 @@ public class SendFragment extends WalletFragment {
         if (isWithinLimits && canCompare(lastBalance, amount)) {
             isWithinLimits = amount.compareTo(lastBalance) <= 0;
         }
-
+        if (!isWithinLimits || !Value.canCompare(this.lastBalance, amount)) {
         return isWithinLimits;
+        }
+        if (amount.compareTo(this.lastBalance) <= 0) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -949,7 +1034,7 @@ public class SendFragment extends WalletFragment {
                     }else if (this.account.getCoinType() instanceof EthFamily) {
                         if (!processInput(input)) {
                             updateView();
-                            this.addressError.setVisibility(8);
+                            this.addressError.setVisibility(View.GONE);
                             return;
                         }}
                     // Process fast the input string
@@ -994,19 +1079,23 @@ public class SendFragment extends WalletFragment {
 
         if (possibleTypes.size() == 1) {
             setAddress(possibleTypes.get(0).newAddress(addressStr), true);
-            sendAmountType = possibleTypes.get(0);
+            if (this.subType == null || !(possibleTypes.get(0) instanceof EthFamily)) {
+                this.sendAmountType = (CoinType) possibleTypes.get(0);
+            } else {
+                this.sendAmountType = this.subType;
+            }
         } else {
             // This address string could be more that one coin type so first check if this address
             // comes from an account to determine the type.
             List<WalletAccount> possibleAccounts = application.getAccounts(possibleTypes);
             AbstractAddress addressOfAccount = null;
-            for (WalletAccount account : possibleAccounts) {
+           /* for (WalletAccount account : possibleAccounts) {
                 AbstractAddress testAddress = account.getCoinType().newAddress(addressStr);
                 if (account.isAddressMine(testAddress)) {
                     addressOfAccount = testAddress;
                     break;
                 }
-            }
+            }*/
 
             if (addressOfAccount != null) {
                 // If address is from another account don't show a dialog. The type should not
@@ -1015,7 +1104,11 @@ public class SendFragment extends WalletFragment {
                 sendAmountType = addressOfAccount.getType();
             } else {
                 // As a last resort let the use choose the correct coin type
-                if (listener != null) listener.showPayToDialog(addressStr);
+                if (this.subType != null) {
+                    this.listener.showPayToDialog(addressStr, this.subType.getId());
+                } else {
+                    this.listener.showPayToDialog(addressStr, null);
+                }
             }
         }
     }
@@ -1041,14 +1134,16 @@ public class SendFragment extends WalletFragment {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
+/*        switch (item.getItemId()) {
             case R.id.action_empty_wallet:
                 setAmountForEmptyWallet();
                 return true;
             default:
                 // Not one of ours. Perform default menu processing
                 return super.onOptionsItemSelected(item);
-        }
+        }*/
+        item.getItemId();
+        return super.onOptionsItemSelected(item);
     }
 
     @Override
@@ -1089,7 +1184,7 @@ public class SendFragment extends WalletFragment {
     public interface Listener {
         void onTransactionBroadcastSuccess(WalletAccount pocket, Transaction transaction);
         void onTransactionBroadcastFailure(WalletAccount pocket, Transaction transaction);
-        void showPayToDialog(String addressStr);
+        void showPayToDialog(String addressStr, String str2);
     }
 
     private abstract class EditViewListener implements View.OnFocusChangeListener, TextWatcher {
@@ -1121,7 +1216,13 @@ public class SendFragment extends WalletFragment {
                 public boolean onActionItemClicked(ActionMode mode, MenuItem menuItem) {
                     switch (menuItem.getItemId()) {
                         case R.id.action_change_address_type:
-                            if (listener != null) listener.showPayToDialog(getAddress().toString());
+                            if (listener != null) {
+                                if (SendFragment.this.subType != null) {
+                                    SendFragment.this.listener.showPayToDialog(getAddress().toString(), SendFragment.this.subType.getId());
+                                } else {
+                                    SendFragment.this.listener.showPayToDialog(getAddress().toString(), null);
+                                }
+                            }
                             mode.finish();
                             return true;
                     }

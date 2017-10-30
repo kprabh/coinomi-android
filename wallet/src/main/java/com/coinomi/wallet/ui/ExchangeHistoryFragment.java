@@ -27,6 +27,7 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.widget.AddressView;
 import com.coinomi.wallet.ui.widget.Amount;
 import com.coinomi.wallet.util.Fonts;
+import com.coinomi.wallet.util.PoweredByUtil;
 
 import org.bitcoinj.core.Coin;
 
@@ -40,6 +41,7 @@ public final class ExchangeHistoryFragment extends ListFragment {
     private Context activity;
     private WalletApplication application;
     private Configuration config;
+    private String exchange = null;
     private com.coinomi.core.wallet.Wallet wallet;
     private Uri contentUri;
     private LoaderManager loaderManager;
@@ -65,7 +67,7 @@ public final class ExchangeHistoryFragment extends ListFragment {
         this.loaderManager = getLoaderManager();
     }
 
-    @Override
+/*    @Override
     public void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -75,7 +77,7 @@ public final class ExchangeHistoryFragment extends ListFragment {
         setListAdapter(adapter);
 
         loaderManager.initLoader(ID_EXCHANGES_LOADER, null, exchangesLoaderCallbacks);
-    }
+    }*/
 
     @Override
     public void onDestroy() {
@@ -141,7 +143,7 @@ public final class ExchangeHistoryFragment extends ListFragment {
             final Amount deposit = (Amount) view.findViewById(R.id.exchange_deposit);
             final Amount withdraw = (Amount) view.findViewById(R.id.exchange_withdraw);
             final AddressView addressView = (AddressView) view.findViewById(R.id.withdraw_address);
-
+            TextView poweredBy = (TextView) view.findViewById(R.id.powered_by);
             switch (entry.status) {
                 case ExchangeEntry.STATUS_INITIAL:
                     okIcon.setVisibility(View.GONE);
@@ -183,6 +185,22 @@ public final class ExchangeHistoryFragment extends ListFragment {
                     values.setVisibility(View.GONE);
                     addressView.setVisibility(View.GONE);
             }
+            PoweredByUtil.setup(ExchangeHistoryFragment.this.getContext(), entry.exchange, poweredBy, false);
+            PoweredByUtil.setExchangeName(ExchangeHistoryFragment.this.getContext(), entry.exchange, poweredBy);
         }
     }
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Bundle args = getArguments();
+        if (args != null && args.containsKey("exchange_id")) {
+            this.exchange = args.getString("exchange_id");
+        }
+        this.contentUri = ExchangeHistoryProvider.contentUri(this.application.getPackageName());
+        this.adapter = new ExchangeEntryAdapter(this.activity);
+        setListAdapter(this.adapter);
+        this.loaderManager.initLoader(0, null, this.exchangesLoaderCallbacks);
+    }
+
+
 }

@@ -4,16 +4,18 @@ import android.app.AlertDialog;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.DialogInterface.OnClickListener;
 import android.content.res.Resources;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.AsyncTask.Status;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v4.app.Fragment;
-import android.support.v4.app.LoaderManager;
+import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.Loader;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -28,8 +30,10 @@ import android.widget.Toast;
 import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
+import com.coinomi.core.coins.eth.CallTransaction;
 import com.coinomi.core.coins.families.EthFamily;
 import com.coinomi.core.exceptions.NoSuchPocketException;
+import com.coinomi.core.exceptions.TransactionBroadcastException;
 import com.coinomi.core.exchange.shapeshift.ShapeShift;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftAmountTx;
 import com.coinomi.core.exchange.shapeshift.data.ShapeShiftMarketInfo;
@@ -39,12 +43,19 @@ import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
+import com.coinomi.core.wallet.AbstractTransaction;
+import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
 import com.coinomi.core.wallet.SendRequest;
 import com.coinomi.core.wallet.families.bitcoin.TransactionWatcherWallet;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.WalletAccount.WalletAccountException;
+import com.coinomi.core.wallet.families.bitcoin.TransactionWatcherWallet;
 import com.coinomi.core.wallet.families.bitcoin.TxFeeEventListener;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthContract;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.ExchangeHistoryProvider;
 import com.coinomi.wallet.ExchangeHistoryProvider.ExchangeEntry;
@@ -54,9 +65,10 @@ import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.ui.widget.SendOutput;
 import com.coinomi.wallet.ui.widget.TransactionAmountVisualizer;
 import com.coinomi.wallet.util.Keyboard;
+import com.coinomi.wallet.util.PoweredByUtil;
 import com.coinomi.wallet.util.WalletUtils;
 import com.coinomi.wallet.util.WeakHandler;
-
+import java.util.HashMap;
 import org.acra.ACRA;
 import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.crypto.KeyCrypterException;
@@ -111,30 +123,14 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
     private static final String PREPARE_TRANSACTION_BUSY_DIALOG_TAG = "prepare_transaction_busy_dialog_tag";
     private static final String SIGNING_TRANSACTION_BUSY_DIALOG_TAG = "signing_transaction_busy_dialog_tag";
 
-    private Handler handler = new MyHandler(this);
-    @Nullable private String password;
-    private Listener listener;
+
     private ContentResolver contentResolver;
-    private SignAndBroadcastTask signAndBroadcastTask;
     private CreateTransactionTask createTransactionTask;
     private WalletApplication application;
     private Configuration config;
     private String contractData;
-    @Nullable AbstractAddress sendToAddress;
-    @Nullable private Value sendAmount;
     boolean emptyWallet;
-    private CoinType sourceType;
-    private SendRequest request;
-    @Nullable private AbstractWallet sourceAccount;
-    @Nullable private ExchangeEntry exchangeEntry;
-    @Nullable private AbstractAddress tradeDepositAddress;
-    @Nullable private Value tradeDepositAmount;
-    @Nullable private AbstractAddress tradeWithdrawAddress;
-    @Nullable private Value tradeWithdrawAmount;
-    @Nullable private TxMessage txMessage;
-    private boolean transactionBroadcast = false;
     @Nullable private Exception error;
-    private HashMap<String, ExchangeRate> localRates = new HashMap<>();
     private CountDownTimer countDownTimer;
 
     @BindView(R.id.transaction_info) TextView transactionInfo;
@@ -147,8 +143,29 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
     View changeFeesView;
     @BindView(2131689710)
     Spinner feePriority;
+    private String exchange;
+    private ExchangeEntry exchangeEntry;
+    private Handler handler = new MyHandler(this);
     private Value lastFee;
+    private Listener listener;
+    private HashMap<String, ExchangeRate> localRates = new HashMap();
     private ShapeShiftMarketInfo marketInfo;
+    private String password;
+    @BindView(2131689820)
+    TextView poweredBy;
+    private SendRequest request;
+    private Value sendAmount;
+    AbstractAddress sendToAddress;
+    private CoinType sendToType;
+    private SignAndBroadcastTask signAndBroadcastTask;
+    private AbstractWallet sourceAccount;
+    private CoinType sourceType;
+    private AbstractAddress tradeDepositAddress;
+    private Value tradeDepositAmount;
+    private AbstractAddress tradeWithdrawAddress;
+    private Value tradeWithdrawAmount;
+    private boolean transactionBroadcast = false;
+    private TxMessage txMessage;
     private Unbinder unbinder;
 
     public static MakeTransactionFragment newInstance(Bundle args) {
@@ -177,31 +194,47 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
                 checkState(request.tx.getSentTo().size() == 1, "Only one output is currently supported");
                 sendToAddress = request.tx.getSentTo().get(0).getAddress();
                 sourceType = request.type;
+                staticRequest = true;
+                preloadCachedRates();
                 return;
             }
 
             String fromAccountId = args.getString(ARG_ACCOUNT_ID);
             sourceAccount = (AbstractWallet) checkNotNull(application.getAccount(fromAccountId));
             application.maybeConnectAccount(sourceAccount);
-            sourceType = sourceAccount.getCoinType();
-            emptyWallet = args.getBoolean(ARG_EMPTY_WALLET, false);
-            sendAmount = (Value) args.getSerializable(ARG_SEND_VALUE);
-            if (emptyWallet && sendAmount != null) {
-                throw new IllegalArgumentException(
-                        "Cannot set 'empty wallet' and 'send amount' at the same time");
-            }
-            if (args.containsKey(ARG_SEND_TO_ACCOUNT_ID)) {
-                String toAccountId = args.getString(ARG_SEND_TO_ACCOUNT_ID);
-                AbstractWallet toAccount = (AbstractWallet) checkNotNull(application.getAccount(toAccountId));
-                sendToAddress = toAccount.getReceiveAddress(config.isManualAddressManagement());
-                sendingToAccount = true;
+            if (args.containsKey("send_from_coin_type")) {
+                this.sourceType = (CoinType) Preconditions.checkNotNull(args.getSerializable("send_from_coin_type"));
             } else {
-                sendToAddress = (AbstractAddress) checkNotNull(args.getSerializable(ARG_SEND_TO_ADDRESS));
-                sendingToAccount = false;
+                this.sourceType = this.sourceAccount.getCoinType();
             }
+            this.emptyWallet = args.getBoolean("empty_wallet", false);
+            this.sendAmount = (Value) args.getSerializable("send_value");
+            if (!this.emptyWallet || this.sendAmount == null) {
+                if (args.containsKey("send_to_account_id")) {
+                    String toAccountId = args.getString("send_to_account_id");
+                    this.sendToType = (CoinType) args.getSerializable("send_to_coin_type");
+                    AbstractWallet toAccount = (AbstractWallet) Preconditions.checkNotNull(this.application.getAccount(toAccountId));
+                    if (this.sendToType instanceof ERC20Token) {
+                        this.sendToAddress = this.sendToType.newAddress(toAccount.getReceiveAddress(this.config.isManualAddressManagement()).toString());
+                    } else {
+                        this.sendToAddress = toAccount.getReceiveAddress(this.config.isManualAddressManagement());
+                    }
+                    this.sendingToAccount = true;
+                } else {
+                    this.sendToAddress = (AbstractAddress) Preconditions.checkNotNull(args.getSerializable("send_to_address"));
+                    this.sendingToAccount = false;
+                }
 
             txMessage = (TxMessage) args.getSerializable(ARG_TX_MESSAGE);
-
+                if (args.containsKey("contract_data")) {
+                    this.contractData = args.getString("contract_data");
+                    if (this.contractData != null && this.contractData.startsWith("0x")) {
+                        this.contractData = this.contractData.replace("0x", "");
+                    }
+                }
+                if (args.containsKey("exchange_id")) {
+                    this.exchange = args.getString("exchange_id");
+                }
             if (savedState != null) {
                 error = (Exception) savedState.getSerializable(ERROR);
                 transactionBroadcast = savedState.getBoolean(TRANSACTION_BROADCAST);
@@ -213,6 +246,9 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
             }
             preloadCachedRates();
             maybeStartCreateTransaction();
+                return;
+            }
+            throw new IllegalArgumentException("Cannot set 'empty wallet' and 'send amount' at the same time");
         } catch (Exception e) {
             error = e;
             if (listener != null) {
@@ -259,18 +295,13 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
         tradeWithdrawSendOutput.setVisibility(View.GONE);
         showTransaction();
 
-        TextView poweredByShapeShift = (TextView) view.findViewById(R.id.powered_by_shapeshift);
-        poweredByShapeShift.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                new AlertDialog.Builder(getActivity())
-                        .setTitle(R.string.about_shapeshift_title)
-                        .setMessage(R.string.about_shapeshift_message)
-                        .setPositiveButton(R.string.button_ok, null)
-                        .create().show();
+        if (isExchangeNeeded()) {
+            if (this.exchange == null) {
+                this.exchange = this.application.getShapeShift().getExchange();
             }
-        });
-        poweredByShapeShift.setVisibility((isExchangeNeeded() ? View.VISIBLE : View.GONE));
+            PoweredByUtil.setup(getContext(), this.exchange, this.poweredBy);
+            this.poweredBy.setVisibility(View.VISIBLE);
+        }
 
         return view;
     }
@@ -344,7 +375,12 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
 
     private void showTransaction() {
         if (request != null && txVisualizer != null) {
-            txVisualizer.setTransaction(sourceAccount, request.tx);
+            if (this.sourceType instanceof ERC20Token) {
+                txVisualizer.setContractTransaction(this.sourceAccount, this.request.getTx(), this.tradeDepositAmount);
+            } else {
+                this.txVisualizer.setTransaction(this.sourceAccount, this.request.getTx());
+            }
+
             if (tradeWithdrawAmount != null && tradeWithdrawAddress != null) {
                 tradeWithdrawSendOutput.setVisibility(View.VISIBLE);
                 if (sendingToAccount) {
@@ -379,7 +415,17 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
                                             @Nullable Value amount, @Nullable TxMessage txMessage)
             throws WalletAccount.WalletAccountException {
 
-        SendRequest sendRequest;byte[] bArr = null;
+        SendRequest sendRequest;
+        byte[] bArr = null;
+        if (this.sourceType instanceof ERC20Token) {
+            try {
+                EthContract contract = (EthContract) ((EthFamilyWallet) this.sourceAccount).getAllContracts().get(((ERC20Token) this.sourceType).getAddress());
+                this.contractData = Hex.toHexString(CallTransaction.createCallTransaction(0, 1, 1000000, ((ERC20Token) this.sourceType).getAddress().replace("0x", ""), 0, contract.getContract().getByName(contract.getContract().getByName("transfer").name), (Object[]) new String[]{sendTo.toString(), amount.getBigInt().toString()}).getData());
+                sendTo = this.sourceAccount.getCoinType().newAddress(((ERC20Token) this.sourceType).getAddress());
+                amount = this.sourceAccount.getCoinType().zeroCoin();
+            } catch (Exception e) {
+            }
+        }
         if (emptyWallet) {
             sendRequest = sourceAccount.getEmptyWalletRequest(sendTo, contractData == null ? null : Hex.decode(this.contractData));
         } else {            AbstractWallet abstractWallet = this.sourceAccount;
@@ -391,7 +437,7 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
         }
         sendRequest.txMessage = txMessage;
         sendRequest.signTransaction = false;
-        if (!this.sourceType.hasDynamicFees() || (this.sourceType instanceof EthFamily)) {
+        if (!this.sourceType.hasDynamicFees() || (this.sourceType instanceof EthFamily) || (this.sourceType instanceof ERC20Token)) {
             this.sourceAccount.completeTransaction(sendRequest);
         }
         if (this.sourceType.hasDynamicFees() && this.lastFee != null) {
@@ -556,9 +602,12 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
     private void updateLocalRates() {
         if (localRates != null) {
             if (txVisualizer != null && localRates.containsKey(sourceType.getSymbol())) {
-                txVisualizer.setExchangeRate(localRates.get(sourceType.getSymbol()));
+                ExchangeRate baseRate = null;
+                if (this.sourceAccount != null) {
+                    baseRate = (ExchangeRate) this.localRates.get(this.sourceAccount.getCoinType().getSymbol());
             }
-
+                this.txVisualizer.setExchangeRate((ExchangeRate) this.localRates.get(this.sourceType.getSymbol()), baseRate);
+            }
             if (tradeWithdrawAmount != null && localRates.containsKey(tradeWithdrawAmount.type.getSymbol())) {
                 ExchangeRate rate = localRates.get(tradeWithdrawAmount.type.getSymbol());
                 Value fiatAmount = rate.convert(tradeWithdrawAmount);
@@ -578,7 +627,7 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
         void onSignResult(@Nullable Exception error, @Nullable ExchangeEntry exchange);
     }
 
-    private final LoaderManager.LoaderCallbacks<Cursor> rateLoaderCallbacks = new LoaderManager.LoaderCallbacks<Cursor>() {
+    private final LoaderCallbacks<Cursor> rateLoaderCallbacks = new LoaderCallbacks<Cursor>() {
 
         @Override
         public Loader<Cursor> onCreateLoader(final int id, final Bundle args) {
@@ -625,8 +674,11 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
                     break;
                 case STOP_TRADE_TIMEOUT:
                     ref.onStopTradeCountDown();
-                    break;case 4:
+                    break;
+                case 4:
                     ref.onSetFee((Value) msg.obj);
+                    return;
+                default:
                     return;
             }
         }
@@ -738,47 +790,51 @@ public class MakeTransactionFragment extends Fragment implements TxFeeEventListe
 
         @Override
         protected Exception doInBackground(Void... params) {
-            Wallet wallet = application.getWallet();
-            if (wallet == null) return new NoSuchPocketException("No wallet found.");
-            try {
-                if (sourceAccount != null) {
-                    if (wallet.isEncrypted()) {
-                        KeyCrypter crypter = checkNotNull(wallet.getKeyCrypter());
-                        request.aesKey = crypter.deriveKey(password);
-                    }
-                    request.signTransaction = true;
-                    sourceAccount.completeAndSignTx(request);
-                }
-
-                // Before broadcasting, check if there is an error, like the trade expiration
-                if (error != null) throw error;
-
-                if (sourceAccount != null) {
-                    if (!sourceAccount.broadcastTxSync(request.tx)) {
-                        throw new Exception("Error broadcasting transaction: " + request.tx.getHashAsString());
-                    }
-                } else {
-                    // TODO handle better
-                    WalletAccount account =
-                            wallet.getAccounts(request.tx.getSentTo().get(0).getAddress()).get(0);
-                    if (!account.broadcastTxSync(request.tx)) {
-                        throw new Exception("Error broadcasting transaction: " + request.tx.getHashAsString());
-                    }
-                }
-
-                transactionBroadcast = true;
-                if (isExchangeNeeded() && tradeDepositAddress != null && tradeDepositAmount != null) {
-                    exchangeEntry = new ExchangeEntry(tradeDepositAddress,
-                            tradeDepositAmount, request.tx.getHashAsString());
-                    Uri uri = ExchangeHistoryProvider.contentUri(application.getPackageName(),
-                            tradeDepositAddress);
-                    contentResolver.insert(uri, exchangeEntry.getContentValues());
-                }
-                handler.sendEmptyMessage(STOP_TRADE_TIMEOUT);
+            Wallet wallet = MakeTransactionFragment.this.application.getWallet();
+            if (wallet == null) {
+                return new NoSuchPocketException("No wallet found.");
             }
-            catch (Exception e) { error = e; }
-
-            return error;
+            try {
+                if (MakeTransactionFragment.this.sourceAccount != null) {
+                    if (wallet.isEncrypted()) {
+                        KeyCrypter crypter = (KeyCrypter) Preconditions.checkNotNull(wallet.getKeyCrypter());
+                        MakeTransactionFragment.this.request.aesKey = crypter.deriveKey(MakeTransactionFragment.this.password);
+                    }
+                    MakeTransactionFragment.this.request.signTransaction = true;
+                    MakeTransactionFragment.this.sourceAccount.completeAndSignTx(MakeTransactionFragment.this.request);
+                }
+                if (MakeTransactionFragment.this.error != null) {
+                    throw MakeTransactionFragment.this.error;
+                }
+                AbstractTransaction tx = (AbstractTransaction) Preconditions.checkNotNull(MakeTransactionFragment.this.request.getTx());
+                if (MakeTransactionFragment.this.sourceAccount != null) {
+                    if (!MakeTransactionFragment.this.sourceAccount.broadcastTxSync(tx)) {
+                        throw new TransactionBroadcastException("Error broadcasting transaction: " + tx.getHashAsString());
+                    }
+                } else if (!((WalletAccount) wallet.getAccounts(((AbstractOutput) tx.getSentTo().get(0)).getAddress()).get(0)).broadcastTxSync(tx)) {
+                    throw new TransactionBroadcastException("Error broadcasting transaction: " + tx.getHashAsString());
+                }
+                MakeTransactionFragment.this.transactionBroadcast = true;
+                if (MakeTransactionFragment.this.isExchangeNeeded() && MakeTransactionFragment.this.tradeDepositAddress != null) {
+                    Value amountDeposited = null;
+                    if (MakeTransactionFragment.this.request.isEmptyWallet()) {
+                        for (AbstractOutput out : MakeTransactionFragment.this.request.getTx().getSentTo()) {
+                            if (out.getAddress().equals(MakeTransactionFragment.this.tradeDepositAddress)) {
+                                amountDeposited = out.getValue();
+                            }
+                        }
+                    } else {
+                        amountDeposited = MakeTransactionFragment.this.tradeDepositAmount;
+                    }
+                    MakeTransactionFragment.this.exchangeEntry = new ExchangeEntry(MakeTransactionFragment.this.tradeDepositAddress, (Value) Preconditions.checkNotNull(amountDeposited), tx.getHashAsString(), MakeTransactionFragment.this.exchange);
+                    MakeTransactionFragment.this.contentResolver.insert(ExchangeHistoryProvider.contentUri(MakeTransactionFragment.this.application.getPackageName(), MakeTransactionFragment.this.tradeDepositAddress), MakeTransactionFragment.this.exchangeEntry.getContentValues());
+                }
+                MakeTransactionFragment.this.handler.sendEmptyMessage(3);
+                return MakeTransactionFragment.this.error;
+            } catch (Exception e) {
+                MakeTransactionFragment.this.error = e;
+                return error;
+            }
         }
 
         protected void onPostExecute(final Exception e) {
