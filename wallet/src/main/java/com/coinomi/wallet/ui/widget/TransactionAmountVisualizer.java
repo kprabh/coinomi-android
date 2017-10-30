@@ -12,10 +12,13 @@ import com.coinomi.core.coins.Value;
 import com.coinomi.core.messages.TxMessage;
 import com.coinomi.core.util.ExchangeRate;
 import com.coinomi.core.util.GenericUtils;
+import com.coinomi.core.util.TransactionUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractTransaction.AbstractOutput;
 import com.coinomi.core.wallet.AbstractWallet;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
+import com.coinomi.core.wallet.families.eth.EthTransaction;
 import com.coinomi.wallet.R;
 import com.google.common.collect.ImmutableList;
 
@@ -37,7 +40,6 @@ public class TransactionAmountVisualizer extends LinearLayout {
     private Value outputAmount;
     private Value feeAmount;
     private boolean isSending;
-
     private AbstractAddress address;
     private CoinType type;
 
@@ -59,12 +61,23 @@ public class TransactionAmountVisualizer extends LinearLayout {
         }
     }
 
+    public void setContractTransaction(AbstractWallet pocket, AbstractTransaction tx, Value tradeDepositAmount) {
+        if (tradeDepositAmount != null) {
+            setTransaction(pocket, tx);
+            this.outputAmount = tradeDepositAmount;
+            this.output.setAmount(GenericUtils.formatCoinValue(tradeDepositAmount.type, this.outputAmount));
+            this.output.setSymbol(tradeDepositAmount.type.getSymbol());
+            return;
+        }
+        setTransaction(pocket, tx);
+    }
+
     public void setTransaction(@Nullable AbstractWallet pocket, AbstractTransaction tx) {
         type = tx.getType();
         String symbol = type.getSymbol();
 
         final Value value = pocket != null ? tx.getValue(pocket) : type.value(0);
-        isSending = pocket != null ? value.signum() < 0 : true;
+        isSending = TransactionUtils.isSending(value);
         // if sending and all the outputs point inside the current pocket. If received
         boolean isInternalTransfer = isSending;
         output.setVisibility(View.VISIBLE);
@@ -102,9 +115,18 @@ public class TransactionAmountVisualizer extends LinearLayout {
         if (type.canHandleMessages()) {
             setMessage(type.getMessagesFactory().extractPublicMessage(tx));
         }
+        if ((tx instanceof EthTransaction) && ((EthTransaction) tx).getData() != null && ((EthFamilyWallet) pocket).getAllContracts().containsKey(((AbstractOutput) tx.getSentTo().get(0)).getAddress().toString())) {
+            String message = ((EthTransaction) tx).getData();
+            if (message != null) {
+                this.txMessageLabel.setText(R.string.contract_data);
+                this.txMessageLabel.setVisibility(View.VISIBLE);
+                this.txMessage.setText(message);
+                this.txMessage.setVisibility(View.VISIBLE);
+            }
+        }
     }
 
-    private void setMessage(@Nullable TxMessage message) {
+    private void setMessage(TxMessage message) {
         if (message != null) {
             switch (message.getType()) {
                 case PRIVATE:
@@ -121,7 +143,7 @@ public class TransactionAmountVisualizer extends LinearLayout {
         }
     }
 
-    public void setExchangeRate(ExchangeRate rate) {
+    public void setExchangeRate(ExchangeRate rate, ExchangeRate baseRate) {
         if (outputAmount != null) {
             Value fiatAmount = rate.convert(type, outputAmount.toCoin());
             output.setAmountLocal(GenericUtils.formatFiatValue(fiatAmount));
@@ -129,7 +151,10 @@ public class TransactionAmountVisualizer extends LinearLayout {
         }
 
         if (isSending && feeAmount != null) {
-            Value fiatAmount = rate.convert(type, feeAmount.toCoin());
+            if (baseRate == null) {
+                baseRate = rate;
+            }
+            Value fiatAmount = baseRate.convert(type, feeAmount.toCoin());
             fee.setAmountLocal(GenericUtils.formatFiatValue(fiatAmount));
             fee.setSymbolLocal(fiatAmount.type.getSymbol());
         }

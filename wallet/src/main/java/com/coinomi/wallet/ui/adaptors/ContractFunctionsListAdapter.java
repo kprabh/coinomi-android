@@ -55,7 +55,7 @@ public class ContractFunctionsListAdapter extends BaseAdapter {
         ((TextView) row.findViewById(R.id.function_name)).setText(function.name.isEmpty() ? this.context.getString(R.string.function_default) : function.name);
         TextView costFontIcon = (TextView) ButterKnife.findById(row, (int) R.id.function_cost_money);
         Fonts.setTypeface(costFontIcon, Font.COINOMI_FONT_ICONS);
-        costFontIcon.setVisibility(function.constant ? 8 : 0);
+        costFontIcon.setVisibility(function.constant ? View.GONE : View.VISIBLE);
     }
 
     public void setContract(EthContract contract) {

@@ -15,15 +15,20 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
+
+import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.core.uri.CoinURI;
 import com.coinomi.core.uri.CoinURIParseException;
 import com.coinomi.core.wallet.WalletAccount;
 import com.coinomi.wallet.Constants;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import com.coinomi.wallet.util.Keyboard;
 import com.coinomi.wallet.util.WeakHandler;
+import com.coinomi.core.Preconditions;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +68,7 @@ public class AccountFragment extends Fragment {
     private Listener listener;
     private WalletApplication application;
     private final MyHandler handler = new MyHandler(this);
+    private CoinType subType;
     private Unbinder unbinder;
     public static AccountFragment getInstance() {
         AccountFragment fragment = new AccountFragment();
@@ -84,9 +90,14 @@ public class AccountFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
-
-        // TODO handle null account
-        account = application.getAccount(getArguments().getString(Constants.ARG_ACCOUNT_ID));
+        this.account = (WalletAccount) Preconditions.checkNotNull(this.application.getAccount(getArguments().getString("account_id")));
+        this.subType = null;
+        if (getArguments().containsKey("sub_coin_id")) {
+            this.subType = this.account.getCoinType(getArguments().getString("sub_coin_id"));
+            if (this.subType != null && (this.subType instanceof ERC20Token) && (this.account instanceof EthFamilyWallet)) {
+                ((EthFamilyWallet) this.account).subscribeToContract(((ERC20Token) this.subType).getAddress());
+            }
+        }
     }
 
     @Override
@@ -114,6 +125,9 @@ public class AccountFragment extends Fragment {
                         case SEND:
                             listener.onSendSelected();
                             break;
+                        case CONTRACT:
+                            AccountFragment.this.listener.onContractsSelected();
+                            return;
                         default:
                             throw new RuntimeException("Unknown screen item: " + position);
                     }
@@ -125,7 +139,7 @@ public class AccountFragment extends Fragment {
         });
 
         viewPager.setAdapter(
-                new AppSectionsPagerAdapter(getActivity(), getChildFragmentManager(), account));
+                new AppSectionsPagerAdapter(getActivity(), getChildFragmentManager(), account, subType));
 
         return view;
     }
@@ -184,11 +198,17 @@ public class AccountFragment extends Fragment {
                     }
                     break;
                 case BALANCE:
-                    inflater.inflate(R.menu.balance, menu);
-                    // Disable sign/verify for coins that don't support it
-                    menu.findItem(R.id.action_sign_verify_message)
-                            .setVisible(account.getCoinType().canSignVerifyMessages());
-                    break;
+                    if (this.subType == null || !(this.account instanceof EthFamilyWallet) || !(this.subType instanceof ERC20Token)) {
+                        inflater.inflate(R.menu.balance, menu);
+                        menu.findItem(R.id.action_sign_verify_message).setVisible(this.account.getCoinType().canSignVerifyMessages());
+                        return;
+                    } else if (((EthFamilyWallet) this.account).isFavorite(this.subType)) {
+                        inflater.inflate(R.menu.token_remove_from_favorites, menu);
+                        return;
+                    } else {
+                        inflater.inflate(R.menu.token_add_to_favorites, menu);
+                        return;
+                    }
                 case SEND:
                     inflater.inflate(R.menu.send, menu);
                     break;case CONTRACT:
@@ -253,7 +273,8 @@ public class AccountFragment extends Fragment {
                     break;
                 case SEND:
                     if (f instanceof SendFragment) return f;
-                    break; case CONTRACT:
+                    break;
+                case CONTRACT:
                     if (f instanceof ContractsFragment) return f;
                     break;
                 default:
@@ -264,16 +285,21 @@ public class AccountFragment extends Fragment {
     }
 
     @SuppressWarnings({ "unchecked"})
-    private static <T extends Fragment> T createFragment(WalletAccount account, int item) {
+    private static <T extends Fragment> T createFragment(WalletAccount account, CoinType subType, int item) {
         String accountId = account.getId();
         switch (item) {
             case RECEIVE:
-                return (T) AddressRequestFragment.newInstance(accountId);
+                return (T) AddressRequestFragment.newInstance(accountId, subType);
             case BALANCE:
-                return (T) BalanceFragment.newInstance(accountId);
+                return (T) BalanceFragment.newInstance(accountId, subType);
             case SEND:
-                return (T) SendFragment.newInstance(accountId); case CONTRACT:
-                return (T) ContractsFragment.newInstance(accountId);
+                return (T) SendFragment.newInstance(accountId, subType);
+            case CONTRACT:
+                if (subType == null || !(subType instanceof ERC20Token)) {
+                    return (T) ContractsFragment.newInstance(accountId);
+                }
+                return (T) ContractDetailsFragment.newInstance(accountId, (ERC20Token) subType);
+
             default:
                 throw new RuntimeException("Cannot create fragment, unknown screen item: " + item);
         }
@@ -308,40 +334,50 @@ public class AccountFragment extends Fragment {
         return false;
     }
 
+    public boolean hasSubType() {
+        return this.subType != null;
+    }
+
     private static class AppSectionsPagerAdapter extends FragmentPagerAdapter {
         private final String receiveTitle;
         private final String sendTitle;
         private final String balanceTitle;
-        private ContractsFragment contracts;
+        private Fragment contracts;
         private final String contractsTitle;
         private AddressRequestFragment request;
         private SendFragment send;
         private BalanceFragment balance;
-
+        private CoinType subType;
         private WalletAccount account;
 
-        public AppSectionsPagerAdapter(Context context, FragmentManager fm, WalletAccount account) {
+        public AppSectionsPagerAdapter(Context context, FragmentManager fm, WalletAccount account, CoinType subType) {
             super(fm);
             receiveTitle = context.getString(R.string.wallet_title_request);
             sendTitle = context.getString(R.string.wallet_title_send);
             balanceTitle = context.getString(R.string.wallet_title_balance);
-            this.contractsTitle = context.getString(R.string.wallet_title_contracts);
             this.account = account;
+            this.subType = subType;
+            if (subType == null) {
+                this.contractsTitle = context.getString(R.string.wallet_title_contracts);
+            } else {
+                this.contractsTitle = context.getString(R.string.info);
+            }
         }
 
         @Override
         public Fragment getItem(int i) {
             switch (i) {
                 case RECEIVE:
-                    if (request == null) request = createFragment(account, i);
+                    if (request == null) request = createFragment(account, subType, i);
                     return request;
                 case SEND:
-                    if (send == null) send = createFragment(account, i);
+                    if (send == null) send = createFragment(account, subType, i);
                     return send;
                 case BALANCE:
-                    if (balance == null) balance = createFragment(account, i);
-                    return balance;case CONTRACT:
-                    if (contracts == null) contracts = createFragment(account, i);
+                    if (balance == null) balance = createFragment(account, subType, i);
+                    return balance;
+                case CONTRACT:
+                    if (contracts == null) contracts = createFragment(account, subType, i);
                     return contracts;
                 default:
                     throw new RuntimeException("Cannot get item, unknown screen item: " + i);
@@ -359,7 +395,8 @@ public class AccountFragment extends Fragment {
             switch (i) {
                 case RECEIVE: return receiveTitle;
                 case SEND: return sendTitle;
-                case BALANCE: return balanceTitle;case CONTRACT: return contractsTitle;
+                case BALANCE: return balanceTitle;
+                case CONTRACT: return contractsTitle;
                 default: throw new RuntimeException("Cannot get item, unknown screen item: " + i);
             }
         }

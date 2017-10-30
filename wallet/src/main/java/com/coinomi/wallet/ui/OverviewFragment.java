@@ -18,10 +18,12 @@ import android.view.ViewGroup;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.Wallet;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
 import com.coinomi.wallet.Configuration;
 import com.coinomi.wallet.ExchangeRatesProvider;
 import com.coinomi.wallet.ExchangeRatesProvider.ExchangeRate;
@@ -40,6 +42,7 @@ import org.bitcoinj.utils.Threading;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.List;
 import java.util.Map;
 
 import butterknife.Unbinder;
@@ -255,8 +258,9 @@ public class OverviewFragment extends Fragment{
             // the latter does not take into account the header (which has position 0).
             Object obj = accountRows.getItemAtPosition(position);
 
-            if (listener != null && obj != null && obj instanceof WalletAccount) {
-                listener.onAccountSelected(((WalletAccount) obj).getId());
+            if (listener != null && obj != null && obj instanceof AccountListAdapter.AccountOrType) {
+                AccountListAdapter.AccountOrType accountOrType = (AccountListAdapter.AccountOrType)obj;
+                this.listener.onAccountSelected(accountOrType.account.getId(), accountOrType.subType);
             } else {
                 showGenericError();
             }
@@ -272,8 +276,7 @@ public class OverviewFragment extends Fragment{
             Activity activity = getActivity();
 
             if (obj != null && obj instanceof WalletAccount && activity != null) {
-                ActionMode actionMode = UiUtils.startAccountActionMode(
-                        (WalletAccount) obj, activity, getFragmentManager());
+                ActionMode actionMode = UiUtils.startAccountActionMode(((AccountListAdapter.AccountOrType) obj).account, (ERC20Token)((AccountListAdapter.AccountOrType) obj).subType, activity, getFragmentManager());
                 // Hack to dismiss this action mode when back is pressed
                 if (activity instanceof WalletActivity) {
                     ((WalletActivity) activity).registerActionMode(actionMode);
@@ -338,6 +341,18 @@ public class OverviewFragment extends Fragment{
             else {
                 currentBalance = rate.rate.convert(w.getBalance());
             }
+            for (CoinType t : (List<CoinType>)w.favoriteSubTypes()) {
+                ExchangeRate subrate = (ExchangeRate) this.exchangeRates.get(t.getSymbol());
+                if (subrate == null) {
+                    log.info("Missing exchange rate for {}, skipping...", t.getName());
+                } else {
+                    try {
+                        this.currentBalance = this.currentBalance.add(subrate.rate.convert(w.getBalance(t)));
+                    } catch (Exception e) {
+                        log.error("Error converting balance for type " + t);
+                    }
+                }
+            }
         }
     }
 
@@ -363,7 +378,8 @@ public class OverviewFragment extends Fragment{
 
     public interface Listener extends EditAccountFragment.Listener {
         void onLocalAmountClick();
-        void onAccountSelected(String accountId);
+        //void onAccountSelected(String accountId);
+        void onAccountSelected(String str, CoinType coinType);
         void onRefresh();
     }
 }

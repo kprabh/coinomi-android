@@ -1,5 +1,6 @@
 package com.coinomi.core.wallet.families.bitcoin;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.messages.MessageFactory;
@@ -45,37 +46,37 @@ public final class BitTransaction implements AbstractTransaction {
     final Value value;
     @Nullable final Value fee;
     final boolean isGenerated;
-    public BitTransaction(Sha256Hash transactionId, Transaction transaction, boolean isTrimmed,
-                          Value valueSent, Value valueReceived, @Nullable Value fee, boolean isGenerated) {
-        tx = checkNotNull(transaction);
-        type = (CoinType) tx.getParams();
-        this.isTrimmed = isTrimmed;
-        if (isTrimmed) {
-            hash = checkNotNull(transactionId);
-            this.valueSent = checkNotNull(valueSent);
-            this.valueReceived = checkNotNull(valueReceived);
-            this.value = valueReceived.subtract(valueSent);
-            this.fee = fee;
-        } else {
-            hash = null;
-            this.valueSent = null;
-            this.valueReceived = null;
-            this.value = null;
-            this.fee = null;
-        }this.isGenerated = isGenerated;
+
+    private BitTransaction(Sha256Hash transactionId, Transaction transaction, Value valueSent, Value valueReceived, Value fee, boolean isGenerated) {
+        this.tx = (Transaction) Preconditions.checkNotNull(transaction);
+        this.type = (CoinType) this.tx.getParams();
+        this.isTrimmed = true;
+        this.hash = (Sha256Hash) Preconditions.checkNotNull(transactionId);
+        this.valueSent = (Value) Preconditions.checkNotNull(valueSent);
+        this.valueReceived = (Value) Preconditions.checkNotNull(valueReceived);
+        this.value = valueReceived.subtract(valueSent);
+        this.fee = fee;
+        this.isGenerated = isGenerated;
     }
 
     public BitTransaction(Transaction transaction) {
-        this(checkNotNull(transaction).getHash(), transaction, false, null, null, null, false);
+        this.tx = (Transaction) Preconditions.checkNotNull(transaction);
+        this.type = (CoinType) this.tx.getParams();
+        this.isTrimmed = false;
+        this.hash = null;
+        this.valueSent = null;
+        this.valueReceived = null;
+        this.value = null;
+        this.fee = null;
+        this.isGenerated = false;
     }
 
     public BitTransaction(CoinType type, byte[] rawTx) {
         this(new Transaction(type, rawTx));
     }
 
-    public static BitTransaction fromTrimmed(Sha256Hash transactionId, Transaction transaction,
-                                             Value valueSent, Value valueReceived, Value fee, boolean isGenerated) {
-        return new BitTransaction(transactionId, transaction, true, valueSent, valueReceived, fee, isGenerated);
+    static BitTransaction fromTrimmed(Sha256Hash transactionId, Transaction transaction, Value valueSent, Value valueReceived, Value fee, boolean isGenerated) {
+        return new BitTransaction(transactionId, transaction, valueSent, valueReceived, fee, isGenerated);
     }
 
     @Override

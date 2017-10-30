@@ -32,9 +32,12 @@ import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.Value;
 import com.coinomi.core.coins.families.Families;
 import com.coinomi.core.util.GenericUtils;
+import com.coinomi.core.util.TransactionUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.AbstractTransaction;
 import com.coinomi.core.wallet.AbstractWallet;
+import com.coinomi.core.wallet.families.eth.ERC20Transaction;
+import com.coinomi.core.wallet.families.eth.EthTransaction;
 import com.coinomi.wallet.AddressBookProvider;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.ui.widget.CurrencyTextView;
@@ -60,7 +63,8 @@ public class TransactionsListAdapter extends BaseAdapter {
     private final Context context;
     private final LayoutInflater inflater;
     private final AbstractWallet walletPocket;
-
+    private final String approvedFromTitle;
+    private final String approvedToTitle;
     private final List<AbstractTransaction> transactions = new ArrayList<>();
     private final Resources res;
     private int precision = 0;
@@ -107,6 +111,8 @@ public class TransactionsListAdapter extends BaseAdapter {
         receivedWithTitle = res.getString(R.string.received_with);
         receivedFromTitle = res.getString(R.string.received_from);
         fontIconReceivedWith = res.getString(R.string.font_icon_receive_coins);
+        approvedFromTitle = this.res.getString(R.string.approved_from);
+        approvedToTitle = this.res.getString(R.string.approved_to);
     }
 
     public void setPrecision(final int precision, final int shift) {
@@ -244,6 +250,9 @@ public class TransactionsListAdapter extends BaseAdapter {
                 rowDirectionFontIcon.setBackgroundResource(R.drawable.transaction_row_circle_bg_receive);
                 rowValue.setTextColor(res.getColor(R.color.receive_color_fg));
             }
+            if ((tx instanceof ERC20Transaction) && ((ERC20Transaction) tx).isApproval()) {
+                rowDirectionFontIcon.setBackgroundResource(R.drawable.transaction_row_circle_bg_approval);
+            }
         } else if (confidenceType == ConfidenceType.DEAD) {
             rowLabel.setTextColor(colorSignificant);
             rowValue.setTextColor(colorSignificant);
@@ -287,10 +296,18 @@ public class TransactionsListAdapter extends BaseAdapter {
         } else if (sent) {
             rowDirectionText.setText(this.sentToTitle);
             rowDirectionFontIcon.setText(this.fontIconSentTo);
+            if ((tx instanceof ERC20Transaction) && ((ERC20Transaction) tx).isApproval()) {
+                rowDirectionText.setText(this.approvedToTitle);
+                rowDirectionFontIcon.setText(this.fontIconSentTo);
+            }
         }else {
             if (walletPocket.getCoinType().getFamily() != Families.NXT|| this.walletPocket.getCoinType().getFamily() == Families.ETHEREUM) {
                 rowDirectionText.setText(receivedWithTitle);
                 rowDirectionFontIcon.setText(fontIconReceivedWith);
+                if ((tx instanceof ERC20Transaction) && ((ERC20Transaction) tx).isApproval()) {
+                    rowDirectionText.setText(this.approvedFromTitle);
+                    rowDirectionFontIcon.setText(this.fontIconReceivedWith);
+                }
             } else {
                 rowDirectionText.setText(receivedFromTitle);
                 rowDirectionFontIcon.setText(fontIconReceivedWith);
@@ -374,6 +391,10 @@ public class TransactionsListAdapter extends BaseAdapter {
             else {
                 rowMessageFontIcon.setVisibility(View.VISIBLE);
             }
+        } else if (!(tx instanceof EthTransaction)) {
+            rowMessageFontIcon.setVisibility(View.GONE);
+        } else if (((EthTransaction) tx).hasLogs()) {
+            rowMessageFontIcon.setVisibility(View.VISIBLE);
         } else {
             rowMessageFontIcon.setVisibility(View.GONE);
         }

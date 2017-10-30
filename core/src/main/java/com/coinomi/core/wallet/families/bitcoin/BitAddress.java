@@ -30,9 +30,9 @@ public class BitAddress extends Address implements AbstractAddress {
         super(type, version, hash160);
     }
 
-    BitAddress(CoinType type, String address) throws AddressFormatException {
-        super(type, address);
-    }
+//    BitAddress(CoinType type, String address) throws AddressFormatException {
+//        super(type, address);
+//    }
 
     public static BitAddress from(CoinType type, String address) throws AddressMalformedException {
         try {

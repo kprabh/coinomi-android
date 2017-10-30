@@ -93,34 +93,37 @@ public enum CoinID {
         for (NetworkParameters network : Networks.get()) {
             Networks.unregister(network);
         }
-
+        CoinID[] coinIds = values();
         List<CoinType> coinTypeBuilder = new CopyOnWriteArrayList();
-        for (CoinID id : values()) {
-            Networks.register(id.type);
-
-            if (symbolLookup.containsKey(id.type.symbol)) {
-                throw new IllegalStateException(
-                        "Coin currency codes must be unique, double found: " + id.type.symbol);
+        HashMap<Integer, CoinType> bip44Indexes = new HashMap(coinIds.length);
+        CoinID[] values = values();
+        int length = values.length;
+        int i = 0;
+        while (i < length) {
+            CoinType type = values[i].type;
+            String typeId = type.getId();
+            Networks.register(type);
+            checkAndAddSymbol(type.symbol, type);
+            for (String altSymbol : type.altSymbols) {
+                checkAndAddSymbol(altSymbol, type);
             }
-            symbolLookup.put(id.type.symbol, id.type);
-
-            if (idLookup.containsKey(id.type.getId())) {
-                throw new IllegalStateException(
-                        "Coin IDs must be unique, double found: " + id.type.getId());
+            if (idLookup.containsKey(typeId)) {
+                throw new IllegalStateException("Coin IDs must be unique, duplicate found: " + typeId);
+            } else if (typeId.endsWith("main") || typeId.endsWith("test")) {
+                idLookup.put(typeId, type);
+                if (!uriLookup.containsKey(type.uriScheme)) {
+                    uriLookup.put(type.uriScheme, new CopyOnWriteArrayList());
+                }
+                ((List) uriLookup.get(type.uriScheme)).add(type);
+                if (typeId.endsWith("main") && bip44Indexes.containsKey(Integer.valueOf(type.getBip44Index()))) {
+                    throw new IllegalStateException("Duplicate BIP44 index found for types: : " + type + " and " + bip44Indexes.get(Integer.valueOf(type.getBip44Index())));
+                }
+                bip44Indexes.put(Integer.valueOf(type.getBip44Index()), type);
+                coinTypeBuilder.add(type);
+                i++;
+            } else {
+                throw new IllegalStateException("Coin IDs must end with 'main' or 'test': " + typeId);
             }
-            // Coin ids must end with main or test
-            if (!id.type.getId().endsWith("main") && !id.type.getId().endsWith("test")) {
-                throw new IllegalStateException(
-                        "Coin IDs must end with 'main' or 'test': " + id.type.getId());
-            }
-            idLookup.put(id.type.getId(), id.type);
-
-            if (!uriLookup.containsKey(id.type.uriScheme)) {
-                uriLookup.put(id.type.uriScheme, new CopyOnWriteArrayList());
-            }
-            uriLookup.get(id.type.uriScheme).add(id.type);
-
-            coinTypeBuilder.add(id.type);
         }
         types = coinTypeBuilder;
         addERC20Tokens();
@@ -145,7 +148,12 @@ public enum CoinID {
             }
         }
     }
-
+    private static void checkAndAddSymbol(String symbol, CoinType type) {
+        if (symbolLookup.containsKey(symbol)) {
+            throw new IllegalStateException("Coin currency codes must be unique, duplicate found: " + symbol);
+        }
+        symbolLookup.put(symbol, type);
+    }
     private final CoinType type;
 
     CoinID(final CoinType type) {

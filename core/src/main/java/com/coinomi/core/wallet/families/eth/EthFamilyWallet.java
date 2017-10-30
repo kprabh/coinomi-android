@@ -55,6 +55,7 @@ import org.bitcoinj.crypto.KeyCrypter;
 import org.bitcoinj.utils.ListenerRegistration;
 import org.bitcoinj.utils.Threading;
 import org.bitcoinj.wallet.RedeemData;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.mapdb.DB;
@@ -476,6 +477,20 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
                 try {
                     EthContract contract = EthContract.fromJSON(this.type, new JSONObject(s));
                     this.ethContracts.put(contract.getContractAddress(), contract);
+                    if (contract.isContractType("erc20")) {
+                        ERC20Token token = ERC20Token.getERCToken(contract);
+                        if (token != null) {
+                            /*try
+                            {*/
+                            erc20Tokens.put(contract.getContractAddress(), token);
+                            /*}
+                            catch(JSONException ex){
+                                log.info("error parsing contracts from db");
+                            }*/
+                        } else {
+                            log.warn("Could not add ERC20 token for local db contract " + contract.getContractAddress());
+                        }
+                    }
                 } catch (JSONException e) {
                     log.info("error parsing contracts from db");
                 } catch (Throwable e2) {
@@ -489,6 +504,28 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
                 }
             }
         }
+
+        JSONArray contractJsons = ERC20DefaultTokens.getERC20DefaultTokens(this.type);
+
+        for(int i = 0; i< contractJsons.length(); i++) {
+            JSONObject contractJson = contractJsons.getJSONObject(i);
+            if (contractJson.has("address")) {
+                if (!ethContracts.containsKey(contractJson.getString("address").toLowerCase())) {
+                    EthContract contractObj = EthContract.fromJSON(this.type, contractJson);
+                    ethContracts.put(contractObj.getContractAddress(), contractObj);
+                    if (contractObj.isContractType("erc20")) {
+                        ERC20Token r6 = ERC20Token.getERCToken(contractObj);
+                        if (r6 != null) {
+                            erc20Tokens.put(contractObj.getContractAddress(), r6);
+                        } else {
+                            log.warn("Could not add ERC20 token for default contract " + contractObj.getContractAddress());
+                        }
+                    }
+                }
+
+            }
+        }
+
         temp.clear();
         this.rawTransactions.clear();
         this.nonce = null;
@@ -801,8 +838,8 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
                 log.info("balance 1 " + this.balance);
                 queueOnNewBalance();
             }
-            this.lock.unlock();
-        } catch (Throwable th) {
+
+        } finally {
             this.lock.unlock();
         }
     }
@@ -1056,7 +1093,7 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
     public void newContract(EthContract contract) {
         if (this.ethContracts.containsKey(contract.getContractAddress())) {
             contract.setHistory(((EthContract) this.ethContracts.get(contract.getContractAddress())).getAllHistory());
-        } else {
+        }
             this.ethContracts.put(contract.getContractAddress(), contract);
             if (contract.isContractType("erc20")) {
                 try {
@@ -1075,7 +1112,7 @@ public class EthFamilyWallet extends AbstractWallet<EthTransaction, EthAddress> 
                 }
             }
             storeContractToDB(contract);
-        }
+
     }
 
     public void updateContract(JSONObject contract) {

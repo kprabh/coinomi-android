@@ -3,7 +3,6 @@
     <string name="show_default">Show default</string>
     <string name="app_name" translatable="false">Coinomi</string>
     <string name="app_package" translatable="false">com.coinomi.wallet</string>
-    <string name="coinomi_website" translatable="false">https://coinomi.com</string>
     <string name="almost_equal_to" translatable="false">≈</string>
     <string name="action_scan_qr_code">Scan</string>
     <string name="action_share">Share</string>
@@ -39,8 +38,6 @@
     <string name="button_delete">Delete</string>
     <string name="button_add">Add</string>
     <string name="button_save">Save</string>
-    <string name="button_remove">Remove</string>
-    <string name="button_edit">Edit</string>
     <string name="button_send">Send</string>
     <string name="button_sign">Sign</string>
     <string name="button_verify">Verify</string>
@@ -63,7 +60,6 @@
     <string name="wallet_is_not_locked_message">Your wallet is not locked</string>
     <string name="unlock_wallet_title">Unlock your wallet</string>
     <!-- &#8230; is the ... character -->
-    <string name="unlocking_wallet_working">Unlocking your wallet&#8230;</string>
     <string name="unlocking_wallet_error_title">Could not unlock your wallet</string>
     <string name="unlocking_wallet_error_detail">Are you using the correct password? Please make sure that your password was entered correctly. Attempt to restore using the recovery phrase if this error persists.</string>
     <string name="powered_by">Powered by</string>
@@ -81,7 +77,6 @@
     <string name="welcome_text">Welcome to Coinomi wallet</string>
     <string name="create_wallet">Create a new wallet</string>
     <string name="restore_wallet">Restore a wallet</string>
-    <string name="test_wallet">Test wallet</string>
     <!-- Intro -->
     <string name="override_wallet_warning_title">Override existing wallet?</string>
     <string name="override_new_wallet_warning_message">If you create a new wallet, your existing wallet will be lost unless you backed up you <i>recovery phrase</i>.</string>
@@ -105,7 +100,6 @@
     <string name="restore_error">Could not verify your recovery phrase. %1$s</string>
     <string name="extra_entropy">Extra entropy</string>
     <!-- Wallet activity -->
-    <string name="test_wallet_message">This is a test wallet, where you can send and receive testnet Bitcoins, Litecoin and Dogecoins.\n\nIf you want to use the wallet with real money please go to: <b>Settings &gt; Restore wallet &gt; Create a new wallet</b>.</string>
     <string name="wallet_update_title">New version available</string>
     <string name="wallet_update_message">A new version of Coinomi is available, it contains new features and fixes.</string>
     <string name="pay_with">Send with</string>
@@ -133,13 +127,7 @@
     <!-- Send Activity -->
     <string name="send_coins_activity_title">Send coins</string>
     <!-- Send fragment -->
-    <string name="send_coins_fragment_receiving_address_label">Pay to</string>
     <string name="send_coins_fragment_receiving_address_tip">name or address</string>
-    <string name="send_coins_fragment_receiving_address_error">Invalid Bitcoin Address!</string>
-    <string name="send_coins_fragment_amount_label">Amount to pay</string>
-    <string name="send_coins_fragment_button_send">Send</string>
-    <string name="send_coins_fragment_button_back">Back</string>
-    <string name="send_coins_failed_msg">Failed!</string>
     <string name="send_coins_error_network">Could not connect to the coin network</string>
     <string name="send_coins_error_dust">The sending amount is too small and will be rejected by the network</string>
     <!-- Here the %1$s is a detailed error message -->
@@ -206,7 +194,6 @@
     <string name="title_activity_about">About Coinomi</string>
     <string name="app_name_long">Coinomi for Android</string>
     <string name="about_licence">An open source project\nhttps://github.com/Coinomi/coinomi-android</string>
-    <string name="about_credits_nubits">Server infrastructure donated by NuBits - The World\'s First Stable Digital Currency\nhttps://nubits.com/</string>
     <string name="about_credits_translations">Translations provided by:</string>
     <string name="about_credits_translations_credits" translatable="false">Tamara Castellano (Italian)\nJorge Nicolas Karmis (Spanish)\nGeorge Kimionis (Greek)\n@visvirial (Japanese)\nДенис Рейн (Russian, Ukrainian)</string>
     <string name="about_credits_bitcoinj">Uses Bitcoinj library\nhttp://bitcoinj.github.io/</string>
@@ -220,7 +207,6 @@
     <!-- Add Coins -->
     <string name="title_activity_add_coins">Add coins</string>
     <!-- %1$s is the coin name e.g. ... create a Bitcoin account ... -->
-    <string name="password_add_coin">You are about to create a %1$s account in your wallet.</string>
     <!-- %1$s is the coin name e.g. Add Bitcoin? -->
     <string name="adding_coin_confirmation_title">Add %1$s?</string>
     <!-- %1$s is the coin name e.g. ... a new Bitcoin account -->
@@ -263,8 +249,6 @@
     <string name="previous_addresses_used">Used address</string>
     <string name="previous_addresses_unused">Unused address</string>
     <!-- Edit Address Book Entry -->
-    <string name="edit_address_book_entry_dialog_title_add">Add address</string>
-    <string name="edit_address_book_entry_dialog_title_edit">Edit address</string>
     <string name="edit_address_book_entry_dialog_address_label">Address</string>
     <string name="edit_address_book_entry_dialog_label_label">Name</string>
     <!-- Edit Account -->
@@ -322,17 +306,13 @@
     <!-- &#8230; is the ... character -->
     <string name="trade_status_waiting_trade">Waiting for exchange&#8230;</string>
     <string name="trade_status_complete_detail">Exchange complete, sent %1$s</string>
-    <string name="trade_status_complete">Exchange complete</string>
     <string name="trade_status_view_transaction">View transaction</string>
     <string name="trade_status_email_receipt">Email receipt</string>
     <!-- %1$s is an error message -->
     <string name="trade_status_failed_detail">Exchange failed: %1$s</string>
     <string name="trade_status_failed">Exchange failed</string>
     <string name="trade_status_delete_message">Remove from history?</string>
-    <string name="trade_status_tx_not_available">Transaction not found, try again in a few seconds</string>
     <!-- Email receipt dialog -->
-    <string name="email_receipt_title">Email receipt</string>
-    <string name="email_receipt_message">Receive an email for this exchange transaction</string>
     <!-- Exchange History -->
     <string name="title_activity_exchange_history">Exchange history</string>
     <string name="exchange_history_empty">No exchanges made</string>
@@ -354,21 +334,12 @@
     <string name="tx_message_public">Public message</string>
     <string name="tx_message_private">Private message</string>
     <string name="tx_message_public_add">Add public message</string>
-    <string name="tx_message_private_add">Add private message</string>
     <string name="tx_message_public_remove">Remove public message</string>
-    <string name="tx_message_private_remove">Remove private message</string>
-    <string name="tx_message_from">From</string>
-    <string name="tx_message_subject">Subject</string>
-    <string name="tx_message">Message</string>
     <!-- Account details -->
     <string name="title_activity_account_details">Account details</string>
     <string name="account_description_label">Description</string>
     <string name="account_public_key_label">Public key</string>
-    <string name="account_extended_public_key_label">Extended public key</string>
     <string name="account_public_key_warning">Sharing your public key will allow anybody to view your balance and transaction history.</string>
-    <string name="account_private_key_label">Private key</string>
-    <string name="account_extended_private_key_label">Extended private key</string>
-    <string name="account_private_key_warning">The private key allows you to send coins from this account. It is not necessary to backup this key as it is derived from your <i>recovery phrase</i></string>
     <!-- Support -->
     <string name="support_message">Contact Coinomi support</string>
     <!-- Sweep wallet -->
@@ -376,7 +347,6 @@
     <string name="title_activity_sweep_wallet">Sweep paper wallet</string>
     <string name="sweep_wallet_info">You are about to transfer coins from a paper wallet to your Coinomi wallet.\nAfter the transfer is complete, please avoid reusing the paper wallet for security reasons.\n\nSupported formats: WIF, BIP38, Mini private key.</string>
     <string name="sweep_wallet_key_title">Private key</string>
-    <string name="sweep_wallet_key_password">Private key password</string>
     <string name="sweep_wallet_key_hint">type or scan a private key</string>
     <string name="sweep_wallet_bad_format">Could not recognize the private key format.</string>
     <string name="sweep_wallet_bad_coin_type">The private key type does not match the destination account type.</string>
@@ -396,11 +366,8 @@
     <!-- Example: The fee value is per kilobyte.-->
     <string name="tx_fees_description">The fee value is %1$s.</string>
     <string name="tx_fees_per_kilobyte">per kilobyte of transaction data</string>
-    <string name="tx_fees_per_byte">per byte of transaction data</string>
     <string name="tx_fees_per_transaction">per transaction</string>
-    <string name="action_contracts">Contracts</string>
     <string name="amount_error_not_enough_money_missing">Not enough money, missing %1$s</string>
-    <string name="change_password_info">To change your password, enter your current password or press the \'Forgot password?\' button to use your recovery phrase.</string>
     <string name="choose_function">Choose a function to interact with the contract</string>
     <string name="clear_function_history">Clear history?</string>
     <string name="contract_balance">Contract Balance</string>
@@ -410,10 +377,7 @@
     <string name="eth_logs_data">Data</string>
     <string name="eth_logs_topic">Topics</string>
     <string name="eth_tx_logs">Event Logs</string>
-    <string name="execute_contract_function">Execute</string>
-    <string name="forgot_password">Forgot password?</string>
     <string name="function_error">Error processing this function</string>
-    <string name="function_no_inputs">This function has no inputs</string>
     <string name="get_contract_info_error">Could not get contract information</string>
     <string name="restore_error_wrong_seed">The recovery phrase entered does not belong to this wallet. Check if you need to enter a BIP39 passphrase.</string>
     <string name="restore_verifying_seed">Verifying seed…</string>
@@ -427,65 +391,31 @@
     <string name="token_added_to_favorites">%1$s added to favorites.</string>
     <string name="token_remove_from_favorites">Remove from favorites</string>
     <string name="token_removed_from_favorites">%1$s removed from favorites.</string>
-    <string name="token_sale_contacting">Please wait while fetching your deposit address…</string>
-    <string name="token_sale_final">You will receive your tokens at the end of the sale with your selected account.</string>
-    <string name="token_sale_info">You can participate in a token sale directly from within your wallet. Please make sure you understand the terms of the sale before proceeding.</string>
-    <string name="trade_info_rates_no_tx_fee">Given rate does not include %1$s transaction fee</string>
-    <string name="visit_site">Visit site</string>
-    <string name="default_exchange">Default Exchange</string>
-    <string name="shapeshift">Shapeshift</string>
-    <string name="about_changelly_title">About Changelly.com</string>
-    <string name="about_changelly_message">Changelly is a cryptocurrency exchange service between digital currencies. The service offers a wide range of digital currencies to buy and sell but does not provide conversion to or from traditional currencies. Changelly aggregates and suggests the best currency rates among the largest crypto trading platforms. The primary object of Changelly is to remove technical barriers between customers and the cryptocurrency ecosystem.</string>
     <!-- Terms -->
-    <string name="accept_terms">I accept the terms</string>
     <string name="contract_data">Contract data</string>
     <string name="contract_search">Search</string>
     <string name="info">info</string>
-    <string name="must_accept_terms">Must accept the terms</string>
-    <string name="stopped_network_error">Could not proceed due to a network error.</string>
-    <string name="pay_from">Pay from</string>
-    <string name="pay_from_label">Pay from</string>
-    <string name="precise_tx_not_permitted">Precise transactions are not available for %1$s</string>
-    <string name="receive_with">Receive with</string>
-    <string name="select_default_exchange">Select default exchange for in wallet exchanges</string>
-    <string name="show_terms">Show terms</string>
-    <string name="action_export_keys">Export keys</string>
     <string name="action_precise">Precise</string>
     <string name="approved_from">approved from</string>
     <string name="approved_to">approved to</string>
-    <string name="button_participate">Participate</string>
-    <string name="changelly">Changelly</string>
-    <string name="changelly_terms_of_service">If you continue, you agree to proceed to Changelly.com, a third party service. All your interactions with Changelly.com are outside of Coinomi\'s control and are subject to Changelly\'s Terms of Service. Coinomi will not provide any personal information to Changelly.com. All information that you may provide to Changelly.com will be subject to Changelly.com\'s Privacy Policy and will not be collected, stored, or used by Coinomi. \n\nCOINOMI ACCEPTS NO RESPONSIBILITY AND WILL NOT BE LIABLE FOR ANY LOSS OR DAMAGE WHATSOEVER SUFFERED AS A RESULT OF ACCESSING, USE OF, OR RELIANCE UPON CHANGELLY.COM\'S INFORMATION AND SERVICES.</string>
     <string name="wallet_key_reset">Please wait while changing the wallet password</string>
     <string name="wallet_key_reset_ok">Wallet password changed</string>
-    <string name="account_derivation_path">Derivation path (BIP32)</string>
-    <string name="advanced_settings">Advanced Settings</string>
     <string name="amount_error_not_enough_money_fees">Not enough money to cover fees</string>
     <string name="cannot_convert_to_btc_address">This address cannot be converted to Bitcoin address</string>
     <string name="change_fees">Change fees</string>
-    <string name="confirm_info">Please confirm your recovery phrase</string>
     <string name="terms_of_service_title">Terms of service</string>
-    <string name="contract_abi">Contract ABI</string>
     <string name="contract_add">Add Contract</string>
     <string name="contract_added_successfully">Contract added successfully</string>
-    <string name="contract_address">Contract Address</string>
-    <string name="contract_name">Name</string>
-    <string name="contract_website">Website</string>
-    <string name="convert_to_btc_address">Convert to Bitcoin address</string>
-    <string name="erase_last_word">Erase last word</string>
     <string name="error_contract_suit">Your operating system does not support enhanced contracts</string>
     <string name="estimating_fees_error">Could not estimate fees, using default.</string>
     <string name="function_input_empty">Empty fields!</string>
     <string name="invalid_contract_abi">Invalid contract ABI</string>
     <string name="invalid_contract_address">Invalid contract address</string>
     <string name="invalid_contract_name">Contract name is empty</string>
-    <string name="recovery_phrase">This is your recovery phrase</string>
-    <string name="seed_warning">If you lose your recovery phrase, your wallet cannot be recovered.</string>
     <string name="send_coins_error_size">The transaction is bigger than what the network allows, try sending a different amount</string>
     <string name="sponsored_by">Server infrastructure sponsored by</string>
     <string name="wallet_title_contracts">dApps</string>
     <string name="block_height">Height: %1$s</string>
-    <string name="contract_suit">Contract Suit</string>
     <!-- TODO translate to other languages -->
     <string name="terms_of_service" translatable="false">LEGAL DISCLAIMER\n
 \n

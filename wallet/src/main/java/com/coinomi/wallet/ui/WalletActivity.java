@@ -19,6 +19,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.Toast;
 
+import com.coinomi.core.Preconditions;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.exceptions.AddressMalformedException;
 import com.coinomi.core.uri.CoinURI;
@@ -27,6 +28,8 @@ import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.core.wallet.SerializedKey;
 import com.coinomi.core.wallet.WalletAccount;
+import com.coinomi.core.wallet.families.eth.ERC20Token;
+import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.Constants;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.service.CoinService;
@@ -57,7 +60,7 @@ import static com.coinomi.wallet.ui.NavDrawerItemType.ITEM_TRADE;
  */
 final public class WalletActivity extends BaseWalletActivity implements
         NavigationDrawerFragment.Listener,
-        AccountFragment.Listener, OverviewFragment.Listener, SelectCoinTypeDialog.Listener,
+        AccountFragment.Listener, ContractsFragment.Listener, OverviewFragment.Listener, SelectCoinTypeDialog.Listener,
         PayWithDialog.Listener, TermsOfUseDialog.Listener {
     private static final Logger log = LoggerFactory.getLogger(WalletActivity.class);
 
@@ -204,6 +207,19 @@ final public class WalletActivity extends BaseWalletActivity implements
         }
     }
 
+    private void navDrawerSelectToken(WalletAccount account, CoinType subType, boolean closeDrawer) {
+        if (this.mNavigationDrawerFragment != null && account != null) {
+            int position = 0;
+            for (NavDrawerItem item : this.navDrawerItems) {
+                if (item.itemType == NavDrawerItemType.ITEM_SUBTYPE && item.subType.equals(subType) && account.getId().equals(item.itemData)) {
+                    this.mNavigationDrawerFragment.setSelectedItem(position, closeDrawer);
+                    return;
+                }
+                position++;
+            }
+        }
+    }
+
     private void navDrawerSelectOverview(boolean closeDrawer) {
         if (mNavigationDrawerFragment != null) {
             int position = 0;
@@ -247,6 +263,15 @@ final public class WalletActivity extends BaseWalletActivity implements
         }
     }
 
+    @Override
+    public void onAccountSelected(String accountId, CoinType subType) {
+        log.info("Coin selected {}", accountId);
+        if (subType == null) {
+            openAccount(accountId);
+        } else {
+            showSubtype(accountId, subType);
+        }
+    }
 
     @Override
     public void onLocalAmountClick() {
@@ -445,6 +470,33 @@ final public class WalletActivity extends BaseWalletActivity implements
         builder.create().show();
     }
 
+    public void showSubtype(String accountId, CoinType subType) {
+        Preconditions.checkState(subType instanceof ERC20Token, "Only ERC20 is currently supported");
+        WalletAccount account = getAccount(accountId);
+        if (account != null && !isChangingConfigurations() && !isFinishing()) {
+            FragmentTransaction ft = getFM().beginTransaction();
+            ft.hide(this.overviewFragment);
+            this.lastAccountId = account.getId();
+            if (this.accountFragment != null) {
+                ft.remove(this.accountFragment);
+            }
+            this.accountFragment = AccountFragment.getInstance(this.lastAccountId);
+            Bundle args = this.accountFragment.getArguments();
+            args.putString("sub_coin_id", subType.getId());
+            this.accountFragment.setArguments(args);
+            ft.add(R.id.contents, this.accountFragment, "account_tag");
+            getWalletApplication().getConfiguration().touchLastAccountId(this.lastAccountId);
+            ft.commitAllowingStateLoss();
+            this.title = ((EthFamilyWallet) account).getContract((ERC20Token) subType).getName() + " (" + account.getDescriptionOrCoinName() + ")";
+            this.isOverviewVisible = false;
+            connectCoinService(this.lastAccountId);
+            navDrawerSelectToken(account, subType, true);
+            if (getSupportActionBar() != null) {
+                getSupportActionBar().setElevation(0.0f);
+            }
+        }
+    }
+
     @Override
     public void onActivityResult(final int requestCode, final int resultCode, final Intent intent) {
         super.onActivityResult(requestCode, resultCode, intent);
@@ -493,7 +545,7 @@ final public class WalletActivity extends BaseWalletActivity implements
         CoinURI coinUri = new CoinURI(input);
         CoinType scannedType = coinUri.getTypeRequired();
 
-        if (!Constants.SUPPORTED_COINS.contains(scannedType)) {
+        if (!Constants.SUPPORTED_COINS.contains(scannedType) && !(scannedType instanceof ERC20Token)) {
             String error = getResources().getString(R.string.unsupported_coin, scannedType.getName());
             throw new CoinURIParseException(error);
         }
@@ -548,14 +600,14 @@ final public class WalletActivity extends BaseWalletActivity implements
                 processUri(CoinURI.convertToCoinURI(addressOfAccount, null, null, null));
             } else {
                 // As a last resort let the use choose the correct coin type
-                showPayToDialog(addressStr);
+                showPayToDialog(addressStr, null);
             }
         }
     }
 
-    public void showPayToDialog(String addressStr) {
+    public void showPayToDialog(String addressStr, String subType) {
         Dialogs.dismissAllowingStateLoss(getFM(), PAY_TO_DIALOG_TAG);
-        SelectCoinTypeDialog.getInstance(addressStr).show(getFM(), PAY_TO_DIALOG_TAG);
+        SelectCoinTypeDialog.getInstance(addressStr, subType).show(getFM(), PAY_TO_DIALOG_TAG);
     }
 
     @Override
@@ -630,7 +682,7 @@ final public class WalletActivity extends BaseWalletActivity implements
         try {
             startActivity(new Intent("android.intent.action.VIEW", Uri.parse("https://coinomi.freshdesk.com")));
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, R.string.error_generic, 0).show();
+            Toast.makeText(this, R.string.error_generic, Toast.LENGTH_SHORT).show();
         }
     }
 

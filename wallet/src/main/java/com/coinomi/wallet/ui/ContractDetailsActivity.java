@@ -13,7 +13,7 @@ public class ContractDetailsActivity extends BaseWalletActivity {
         if (savedInstanceState == null) {
             Bundle extras = getIntent().getExtras();
             if (VERSION.SDK_INT >= 17 && !extras.getBoolean("show_default", true)) {
-                showDefault = false;
+                showDefault = true;
             }
             Fragment fragment;
             if (showDefault) {

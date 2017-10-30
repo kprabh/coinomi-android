@@ -14,7 +14,7 @@ import android.os.StrictMode.ThreadPolicy.Builder;
 import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
-import com.coinomi.sponsor.TokenSaleProxy;
+//import com.coinomi.sponsor.TokenSaleProxy;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.coins.CoinType.FeeProvider;
 import com.coinomi.core.coins.Value;
@@ -75,7 +75,7 @@ public class WalletApplication extends Application {
     @Nullable
     private Wallet wallet;
     private PackageInfo packageInfo;
-    private TokenSaleProxy tokenSaleProxy;
+    //private TokenSaleProxy tokenSaleProxy;
     private String versionString;
     private boolean whatsNew = false;
     private long lastStop;
@@ -188,19 +188,19 @@ public class WalletApplication extends Application {
             exchange = "shapeshift";
         }
         if (!this.exchanges.containsKey(exchange)) {
-            ShapeShift shapeShift = new ShapeShift(NetworkUtils.getHttpClient(getApplicationContext()), exchange);
+            ShapeShift shapeShift = new ShapeShift(NetworkUtils.getHttpClient(getApplicationContext()));
             shapeShift.setApiPublicKey("66acba9c39b3d176196f6923e79b6ccf976039001fe2ca1283d2300c7fec34e6775a580436d55d8382e46133d610d3ce1bb31b5558e67b8e743a834d57bb7dd1");
             this.exchanges.put(exchange, shapeShift);
         }
         return (ShapeShift) this.exchanges.get(exchange);
     }
 
-    public TokenSaleProxy getTokenSaleProxy() {
+   /* public TokenSaleProxy getTokenSaleProxy() {
         if (this.tokenSaleProxy == null) {
             this.tokenSaleProxy = new TokenSaleProxy(NetworkUtils.getHttpClient(getApplicationContext()));
         }
         return this.tokenSaleProxy;
-    }
+    }*/
 
     public File getTxCachePath() {
         return txCachePath;

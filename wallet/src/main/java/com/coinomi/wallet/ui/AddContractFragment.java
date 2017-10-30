@@ -22,7 +22,9 @@ import com.coinomi.core.wallet.families.eth.EthFamilyWallet;
 import com.coinomi.wallet.R;
 import com.coinomi.wallet.WalletApplication;
 import java.util.ArrayList;
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,6 +89,8 @@ public class AddContractFragment extends Fragment {
         String description = this.contractDescription.getText().toString();
         String suit = this.contractSuit.getSelectedItem().toString();
         String icon = "";
+        JSONObject extras = new JSONObject();
+        JSONArray ctypes = new JSONArray();
         if (name.isEmpty()) {
             Toast.makeText(getActivity(), R.string.invalid_contract_name, Toast.LENGTH_LONG).show();
         } else if (address.isEmpty()) {
@@ -96,7 +100,7 @@ public class AddContractFragment extends Fragment {
         } else {
             try {
                 Contract.checkABI(abi);
-                this.account.newContract(new EthContract(this.account.getCoinType(), name, description, website, address, abi, suit, icon, (long) abi.hashCode()));
+                this.account.newContract(new EthContract(this.account.getCoinType(), name, description, website, address, abi, suit, icon, (long) abi.hashCode(), extras, ctypes));
                 Toast.makeText(getActivity(), R.string.contract_added_successfully, Toast.LENGTH_LONG).show();
                 getActivity().finish();
             } catch (JSONException e) {

@@ -9,8 +9,10 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.coinomi.core.coins.CoinID;
 import com.coinomi.core.coins.CoinType;
 import com.coinomi.core.exceptions.AddressMalformedException;
+import com.coinomi.core.exceptions.UnsupportedCoinTypeException;
 import com.coinomi.core.util.GenericUtils;
 import com.coinomi.core.wallet.AbstractAddress;
 import com.coinomi.wallet.Constants;
@@ -32,10 +34,13 @@ public class SelectCoinTypeDialog extends DialogFragment {
 
     public SelectCoinTypeDialog() {}
 
-    public static DialogFragment getInstance(String addressStr) {
+    public static DialogFragment getInstance(String addressStr, String subTypeId) {
         DialogFragment dialog = new SelectCoinTypeDialog();
         dialog.setArguments(new Bundle());
         dialog.getArguments().putString(Constants.ARG_ADDRESS_STRING, addressStr);
+        if (subTypeId != null) {
+            dialog.getArguments().putString("sub_coin_id", subTypeId);
+        }
         return dialog;
     }
 
@@ -57,9 +62,18 @@ public class SelectCoinTypeDialog extends DialogFragment {
 
     @Override @NonNull
     public Dialog onCreateDialog(Bundle savedInstanceState) {
+        final AbstractAddress address;
         Bundle args = getArguments();
         DialogBuilder builder = new DialogBuilder(getActivity());
         String addressStr = args.getString(Constants.ARG_ADDRESS_STRING);
+        CoinType subType = null;
+        if (args.containsKey("sub_coin_id")) {
+            try {
+                subType = CoinID.typeFromId(args.getString("sub_coin_id"));
+            } catch (UnsupportedCoinTypeException e) {
+                log.error("sub type " + args.getString("sub_coin_id") + " does not exist");
+            }
+        }
         List<CoinType> possibleTypes;
         try {
             possibleTypes = GenericUtils.getPossibleTypes(addressStr);
@@ -74,18 +88,39 @@ public class SelectCoinTypeDialog extends DialogFragment {
         int paddingBottom = getResources().getDimensionPixelSize(R.dimen.activity_vertical_margin);
 
         AddressView addressView = null;
-        for (CoinType type : possibleTypes) {
+        if (subType != null) {
             try {
-                final AbstractAddress address = type.newAddress(addressStr);
+                address = subType.newAddress(addressStr);
                 addressView = new AddressView(getActivity());
+
                 addressView.setPadding(0, 0, 0, paddingBottom);
                 addressView.setAddressAndLabel(address);
+                addressView.setIconShown(true);
+                addressView.setNameShown(true);
+                addressView.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        if (SelectCoinTypeDialog.this.listener != null) {
+                            SelectCoinTypeDialog.this.listener.onAddressTypeSelected(address);
+                        }
+                        SelectCoinTypeDialog.this.dismiss();
+                    }
+                });
+                container.addView(addressView);
+            } catch (AddressMalformedException e4) {
+            }
+        }
+        for (CoinType type : possibleTypes) {
+            try {
+                final AbstractAddress  address2 = type.newAddress(addressStr);
+                addressView = new AddressView(getActivity());
+                addressView.setPadding(0, 0, 0, paddingBottom);
+                addressView.setAddressAndLabel(address2);
                 addressView.setIconShown(true);
                 addressView.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
                         if (listener != null) {
-                            listener.onAddressTypeSelected(address);
+                            listener.onAddressTypeSelected(address2);
                         }
                         SelectCoinTypeDialog.this.dismiss();
                     }

@@ -264,7 +264,8 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
         }
     }
 
-    @Deprecated
+
+    @Override
     public boolean broadcastTxSync(EthTransaction tx) {
         log.info("Broadcasting transaction..");
         JSONObject obj = new JSONObject();
@@ -347,11 +348,7 @@ public class EthServerClient extends ServerClientBase implements EthBlockchainCo
 
     }
 
-    public boolean broadcastTxSync(Object tx) {
-        return false;
-    }
-
-    public void subscribeToAddresses(List list, TransactionEventListener listener) {
-
+    public void subscribeToAddresses(List<AbstractAddress> addresses, TransactionEventListener<EthTransaction> listener) {
+        this.addressSubscribers.put(addresses.get(0), listener);
     }
 }

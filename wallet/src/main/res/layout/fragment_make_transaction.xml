@@ -83,7 +83,7 @@
                     android:text="@string/button_confirm" />
 
                 <include
-                    layout="@layout/powered_by"
+                    layout="@layout/powered_by_shapeshift"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_alignBottom="@id/button_confirm"

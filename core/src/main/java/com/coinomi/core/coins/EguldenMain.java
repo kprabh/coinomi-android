@@ -15,7 +15,7 @@ public class EguldenMain extends BitFamily {
         name = "e-Gulden (beta)";
         symbol = "EFL";
         uriScheme = "egulden";
-        bip44Index = 2;
+        bip44Index = 78;
         unitExponent = 8;
         feeValue = value(100000);
         minNonDust = value(1000); // 0.00001 EFL mininput

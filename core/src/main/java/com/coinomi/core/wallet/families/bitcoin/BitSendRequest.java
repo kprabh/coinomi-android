@@ -46,10 +46,8 @@ public class BitSendRequest extends SendRequest<BitTransaction, BitAddress> {
         checkTypeCompatibility(destination.getType());
 
         BitSendRequest req = new BitSendRequest(destination.getType());
-
-        Transaction tx = new Transaction(req.type);
-        tx.addOutput(amount.toCoin(), destination);
-        req.tx = new BitTransaction(tx);
+        req.destinations.add(new Destination(destination, amount));
+        req.reset();
 
         return req;
     }
@@ -59,11 +57,9 @@ public class BitSendRequest extends SendRequest<BitTransaction, BitAddress> {
         checkTypeCompatibility(destination.getType());
 
         BitSendRequest req = new BitSendRequest(destination.getType());
-
+        req.emptyWallet = true;
         req.destinations.add(new Destination(destination, destination.getType().zeroCoin()));
         req.reset();
-        req.emptyWallet = true;
-
         return req;
     }
 

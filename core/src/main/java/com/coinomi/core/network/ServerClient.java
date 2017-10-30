@@ -72,7 +72,6 @@ public final class ServerClient extends ServerClientBase implements BitBlockchai
     private static final long CONNECTION_STABILIZATION = 30;
 
 
-    private CoinType type;
     //   private ServerAddress lastServerAddress;
     private StratumClient stratumClient;
     //  private long retrySeconds = 0;

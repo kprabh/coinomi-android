@@ -80,13 +80,14 @@ public class TrimmedTransaction extends Transaction {
     }
 
 
-    public TransactionOutput getOutput(int index) {
-        checkIndex(index);
+    @Override
+    public TransactionOutput getOutput(long index) {
+        checkIndex((int)index);
 
         if (trimmedOutputs == null) {
             return super.getOutput(index);
         } else {
-            TransactionOutput output = trimmedOutputs.get(index);
+            TransactionOutput output = trimmedOutputs.get((int)index);
             // Trimmed outputs are empty
             if (output == null) {
                 return EmptyTransactionOutput.get((CoinType)getParams());

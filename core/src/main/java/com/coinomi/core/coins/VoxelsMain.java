@@ -21,7 +21,7 @@ public class VoxelsMain extends BitFamily {
         name = "Voxels (beta)";
         symbol = "VOX";
         uriScheme = "Voxels";
-        bip44Index = 81;
+        bip44Index = 129;
         unitExponent = 8;
         feeValue = value(100000);
         minNonDust = value(1000000);
